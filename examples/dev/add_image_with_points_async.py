@@ -4,11 +4,11 @@ from skimage import data
 import numpy as np
 import napari
 
-image_data = data.brain()
+image_data = np.random.rand(100, 1024, 1024)
 
-# 10 million points behaves undesirably on my macbook pro on main (with sync)
+# 1 million points for 10000 points per slice, as in points example
 np.random.seed(0)
-n = 10_000_000
+n = 1_000_000
 points_data = image_data.shape * np.random.rand(n, 3)
 
 viewer = napari.Viewer()

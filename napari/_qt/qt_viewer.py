@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import warnings
+from concurrent.futures import Executor, Future, ThreadPoolExecutor
 from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple
 from weakref import WeakSet
 
@@ -16,7 +17,7 @@ from ..components._interaction_box_mouse_bindings import (
 )
 from ..components.camera import Camera
 from ..components.layerlist import LayerList
-from ..layers.base.base import Layer
+from ..layers.base.base import Layer, LayerSlice
 from ..plugins import _npe2
 from ..plugins.utils import get_potential_readers
 from ..utils import config, perf
@@ -200,6 +201,11 @@ class QtViewer(QSplitter):
             Qt.AA_UseStyleSheetPropagationInWidgetStyles, True
         )
 
+        self.slice_executor: Executor = ThreadPoolExecutor(max_workers=1)
+        self.slice_task: Optional[
+            Future[Tuple[Tuple[Layer, LayerSlice], ...]]
+        ] = None
+
         self.viewer = viewer
         self.dims = QtDims(self.viewer.dims)
         self.controls = QtLayerControlsContainer(self.viewer)
@@ -298,7 +304,7 @@ class QtViewer(QSplitter):
         self.viewer.layers.events.inserted.connect(self._on_add_layer_change)
         self.viewer.layers.events.removed.connect(self._remove_layer)
 
-        self.viewer.dims.events.current_step.connect(self._slice_layers)
+        self.viewer.dims.events.current_step.connect(self._slice_layers_async)
 
         self.setAcceptDrops(True)
 
@@ -336,10 +342,40 @@ class QtViewer(QSplitter):
         # bind shortcuts stored in settings last.
         self._bind_shortcuts()
 
-    def _slice_layers(self) -> None:
-        for layer in self.viewer.layers:
+    def _slice_layers_async(self) -> None:
+        print('QtViewer._slice_layers_async')
+        # If the last slice task is completely done (i.e. the done callback
+        # has started executing), this should have no effect. But otherwise
+        # this has the positive effect of removing a pending task, or a
+        # pending done callback, neither of which are useful.
+        if self.slice_task is not None:
+            self.slice_task.cancel()
+        task_slice = self.slice_executor.submit(self._slice_layers)
+        # Unclear what thread the done callback executes on.
+        # Probably not the main thread unless there is a consistent way to
+        # access that in all Python interpreters.
+        task_slice.add_done_callback(self._on_slices_ready)
+        self.task_slice = task_slice
+
+    def _on_slices_ready(self, task: Future[List[LayerSlice]]) -> None:
+        print('QtViewer._on_slices_ready')
+        if task.cancelled():
+            return
+        # If this callback is run on the main thread, we might want to
+        # execute it on a different one. Eventually, the Qt GUI widget
+        # updates need to get executed on the main thread, but maybe
+        # vispy handles that?
+        for layer, layer_slice in task.result():
             vispy_layer = self.layer_to_visual[layer]
-            vispy_layer.set_slice_point(self.viewer.dims.point)
+            vispy_layer._set_slice(layer_slice)
+
+    def _slice_layers(self) -> Tuple[Tuple[Layer, LayerSlice], ...]:
+        print('QtViewer._slice_layers')
+        world_point = self.viewer.dims.point
+        return tuple(
+            (layer, layer.get_slice(world_point))
+            for layer in self.viewer.layers
+        )
 
     def _ensure_connect(self):
         # lazy load console

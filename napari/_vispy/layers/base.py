@@ -1,6 +1,4 @@
 from abc import ABC, abstractmethod
-from concurrent.futures import Executor, Future, ThreadPoolExecutor
-from typing import Optional
 
 import numpy as np
 from vispy.visuals.transforms import MatrixTransform
@@ -52,9 +50,6 @@ class VispyBaseLayer(ABC):
         self.layer = layer
         self._array_like = False
         self.node = node
-
-        self.slice_executor: Executor = ThreadPoolExecutor(max_workers=1)
-        self.slice_task: Optional[Future[LayerSlice]] = None
 
         (
             self.MAX_TEXTURE_SIZE_2D,
@@ -115,26 +110,9 @@ class VispyBaseLayer(ABC):
     def _on_data_change(self):
         raise NotImplementedError()
 
-    def set_slice_point(self, world_point) -> None:
-        print(f'VispyBaseLayer.set_slice_point({world_point})')
-        if self.slice_task is not None:
-            self.slice_task.cancel()
-        task = self.slice_executor.submit(self.layer.get_slice, world_point)
-        # I think the python docs imply that the done callback will
-        # execute on the calling thread (i.e. the thread calling this function
-        # which should be the main thread in normal usage).
-        task.add_done_callback(self._on_slice_done)
-        self.slice_task = task
-
     # @abstractmethod
     def _set_slice(self, slice: LayerSlice) -> None:
         raise NotImplementedError()
-
-    def _on_slice_done(self, task: Future[LayerSlice]) -> None:
-        if not task.cancelled():
-            # TODO: how quick should we expected vispy to be, especially
-            # when there are multiple slices?
-            self._set_slice(task.result())
 
     def _on_refresh_change(self):
         self.node.update()
