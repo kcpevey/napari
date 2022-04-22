@@ -1,0 +1,18 @@
+{
+    "trace_qt_events": false,
+    "trace_file_on_start": "/tmp/perfmon_slicing_latest.json",
+    "trace_callables": [
+        "slicing"
+    ],
+    "callable_lists": {
+        "slicing": [
+            "napari.layers.image.image.Image._get_slice",
+            "napari.layers.points.points.Points._get_slice",
+            "napari._vispy.layers.image.VispyImageLayer._set_slice",
+            "napari._vispy.layers.points.VispyPointsLayer._set_slice",
+            "napari._qt.qt_viewer.QtViewer._slice_layers",
+            "napari._qt.qt_viewer.QtViewer._slice_layers_async",
+            "napari._qt.qt_viewer.QtViewer._on_slices_ready"
+        ]
+    }
+}
