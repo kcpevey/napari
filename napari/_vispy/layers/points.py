@@ -51,6 +51,7 @@ class VispyPointsLayer(VispyBaseLayer):
         self.node._subvisuals[0].set_data(slice.data[:, ::-1])
 
     def _on_data_change(self):
+        LOGGER.debug('VispyPointsLayer._on_data_change')
         if len(self.layer._indices_view) > 0:
             edge_color = self.layer._view_edge_color
             face_color = self.layer._view_face_color

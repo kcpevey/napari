@@ -115,7 +115,7 @@ class VispyImageLayer(VispyBaseLayer):
         self.reset()
 
     def _on_data_change(self):
-        print('_on_data_change')
+        LOGGER.debug('VispyImageLayer._on_data_change')
         if not self.layer.loaded:
             # Do nothing if we are not yet loaded. Calling astype below could
             # be very expensive. Lets not do it until our data has been loaded.
