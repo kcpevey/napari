@@ -12,6 +12,8 @@ from qtpy.QtCore import QCoreApplication, QObject, Qt
 from qtpy.QtGui import QCursor, QGuiApplication
 from qtpy.QtWidgets import QFileDialog, QSplitter, QVBoxLayout, QWidget
 
+from napari.components.dims import Dims
+
 from ..components._interaction_box_mouse_bindings import (
     InteractionBoxMouseBindings,
 )
@@ -72,6 +74,8 @@ if TYPE_CHECKING:
 
 from ..settings import get_settings
 from ..utils.io import imsave_extensions
+
+LOGGER = logging.getLogger("napari._qt.qt_viewer")
 
 
 def _npe2_decode_selected_filter(
@@ -343,38 +347,44 @@ class QtViewer(QSplitter):
         self._bind_shortcuts()
 
     def _slice_layers_async(self) -> None:
-        print('QtViewer._slice_layers_async')
-        # If the last slice task is completely done (i.e. the done callback
-        # has started executing), this should have no effect. But otherwise
-        # this has the positive effect of removing a pending task, or a
-        # pending done callback, neither of which are useful.
+        LOGGER.debug(
+            'QtViewer._slice_layers_async : %s', self.viewer.dims.current_step
+        )
+        # If the last slice task has started is this should have no effect.
+        # But otherwise this has the positive effect of removing a pending task,
+        # which will be superseded by a new one.
         if self.slice_task is not None:
             self.slice_task.cancel()
-        task_slice = self.slice_executor.submit(self._slice_layers)
-        # Unclear what thread the done callback executes on.
-        # Probably not the main thread unless there is a consistent way to
-        # access that in all Python interpreters.
-        task_slice.add_done_callback(self._on_slices_ready)
-        self.task_slice = task_slice
+        # Make a copy of dims from this thread, so that instance won't be
+        # mutated while the task is running.
+        dims = self.viewer.dims.copy(deep=True)
+        slice_task = self.slice_executor.submit(self._slice_layers, dims)
+        # The done callback seems to execute on the main thread if cancelling
+        # was successful (likely because it executes immediately here, because
+        # the future is done and cancelled), and otherwise on the executor's
+        # single thread.
+        slice_task.add_done_callback(self._on_slices_ready)
+        self.slice_task = slice_task
 
-    def _on_slices_ready(self, task: Future[List[LayerSlice]]) -> None:
-        print('QtViewer._on_slices_ready')
+    def _on_slices_ready(
+        self, task: Future[Tuple[Tuple[Layer, LayerSlice]]]
+    ) -> None:
         if task.cancelled():
             return
-        # If this callback is run on the main thread, we might want to
-        # execute it on a different one. Eventually, the Qt GUI widget
-        # updates need to get executed on the main thread, but maybe
-        # vispy handles that?
+        LOGGER.debug(
+            'QtViewer._on_slices_ready : %s',
+            task.result()[0][1].dims.current_step,
+        )
         for layer, layer_slice in task.result():
             vispy_layer = self.layer_to_visual[layer]
             vispy_layer._set_slice(layer_slice)
 
-    def _slice_layers(self) -> Tuple[Tuple[Layer, LayerSlice], ...]:
-        print('QtViewer._slice_layers')
-        world_point = self.viewer.dims.point
+    def _slice_layers(
+        self, dims: Dims
+    ) -> Tuple[Tuple[Layer, LayerSlice], ...]:
+        LOGGER.debug('QtViewer._slice_layer : %s', dims.current_step)
         return tuple(
-            (layer, layer.get_slice(world_point))
-            for layer in self.viewer.layers
+            (layer, layer._get_slice(dims)) for layer in self.viewer.layers
         )
 
     def _ensure_connect(self):

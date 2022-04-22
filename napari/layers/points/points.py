@@ -1,3 +1,4 @@
+import logging
 import warnings
 from copy import copy, deepcopy
 from itertools import cycle
@@ -7,6 +8,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import gmean
 
+from napari.components.dims import Dims
 from napari.layers.base.base import LayerSlice
 
 from ...utils.colormaps import Colormap, ValidColormapArg
@@ -38,6 +40,8 @@ from ._points_utils import (
 )
 
 DEFAULT_COLOR_CYCLE = np.array([[1, 0, 1, 1], [0, 1, 0, 1]])
+
+LOGGER = logging.getLogger("napari.layers.points")
 
 
 class Points(Layer):
@@ -1442,7 +1446,9 @@ class Points(Layer):
             self.editable = False
 
     def _slice_data(
-        self, dims_indices
+        self,
+        dims_indices,
+        dims_not_displayed=None,
     ) -> Tuple[List[int], Union[float, np.ndarray]]:
         """Determines the slice of points given the indices.
 
@@ -1460,8 +1466,10 @@ class Points(Layer):
             values of 1 corresponds to points located in the slice, and values
             less than 1 correspond to points located in neighboring slices.
         """
+        if dims_not_displayed is None:
+            dims_not_displayed = self._dims_not_displayed
         # Get a list of the data for the points in this slice
-        not_disp = list(self._dims_not_displayed)
+        not_disp = list(dims_not_displayed)
         indices = np.array(dims_indices)
         if len(self.data) > 0:
             if self.out_of_slice_display is True and self.ndim > 2:
@@ -1656,19 +1664,12 @@ class Points(Layer):
         )
         return start_point, end_point
 
-    def _get_slice(self, data_point=None) -> LayerSlice:
-        print(f'Points._get_slice({data_point})')
-        # Hack for presenting last 2 dims of 3D points.
-        distances = np.abs(self.data[:, 0] - data_point[0])
-        # print(f'distances={distances}')
-        matches = distances <= 0.5
-        # print(f'matches={matches}')
-        slice_indices = np.where(matches)[0].astype(int)
-        # print(f'slice_indices={slice_indices}')
-        slice_data = self.data[slice_indices, :]
-        data = np.asarray(slice_data[:, 1:])
-        # print(f'data.shape={data.shape}')
-        return LayerSlice(data=data)
+    def _get_slice(self, dims: Dims) -> LayerSlice:
+        LOGGER.debug('Points._get_slice : enter : %s', dims.current_step)
+        slice_indices = self._get_slice_indices(dims)
+        indices, _ = self._slice_data(slice_indices)
+        data = self.data[np.ix_(indices, dims.displayed)]
+        return LayerSlice(data=data, dims=dims)
 
     def _set_view_slice(self):
         """Sets the view given the indices to slice with."""

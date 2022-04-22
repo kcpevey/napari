@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 
 from napari.layers.base.base import LayerSlice
@@ -9,6 +11,8 @@ from ..utils.gl import BLENDING_MODES
 from ..utils.text import update_text
 from ..visuals.points import PointsVisual
 from .base import VispyBaseLayer
+
+LOGGER = logging.getLogger("napari._vispy.layers.points")
 
 
 class VispyPointsLayer(VispyBaseLayer):
@@ -41,7 +45,9 @@ class VispyPointsLayer(VispyBaseLayer):
         self._on_data_change()
 
     def _set_slice(self, slice: LayerSlice) -> None:
-        print('VispyPointsLayer._set_slice')
+        LOGGER.debug(
+            'VispyPointsLayer._set_slice : %s', slice.dims.current_step
+        )
         self.node._subvisuals[0].set_data(slice.data[:, ::-1])
 
     def _on_data_change(self):

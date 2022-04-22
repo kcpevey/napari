@@ -2,6 +2,7 @@
 """
 from __future__ import annotations
 
+import logging
 import types
 import warnings
 from typing import TYPE_CHECKING, Sequence, Union
@@ -9,6 +10,7 @@ from typing import TYPE_CHECKING, Sequence, Union
 import numpy as np
 from scipy import ndimage as ndi
 
+from napari.components.dims import Dims
 from napari.layers.base.base import LayerSlice
 
 from ...utils import config
@@ -42,6 +44,9 @@ from ._image_utils import guess_multiscale, guess_rgb
 
 if TYPE_CHECKING:
     from ...components.experimental.chunk import ChunkRequest
+
+
+LOGGER = logging.getLogger("napari.layers.image")
 
 
 # It is important to contain at least one abstractmethod to properly exclude this class
@@ -650,16 +655,11 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         image = raw
         return image
 
-    def _get_slice(self, data_point: np.ndarray) -> LayerSlice:
-        print(f'Image._get_slice({data_point})')
-        indices = list(np.rint(data_point).astype(int))
-        # Hack for 2D presentation
-        indices[-1] = slice(None)
-        indices[-2] = slice(None)
-        # print(f'{indices}')
-        data = np.asarray(self.data[tuple(indices)])
-        # print(f'{data}')
-        return LayerSlice(data=data)
+    def _get_slice(self, dims: Dims) -> LayerSlice:
+        LOGGER.debug('Image._get_slice : %s', dims.current_step)
+        slice_indices = self._get_slice_indices(dims)
+        data = np.asarray(self.data[slice_indices])
+        return LayerSlice(data=data, dims=dims)
 
     def _set_view_slice(self):
         """Set the view given the indices to slice with."""

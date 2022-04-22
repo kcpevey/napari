@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import itertools
+import logging
 import warnings
 from abc import ABC, abstractmethod
 from collections import defaultdict, namedtuple
@@ -11,6 +12,7 @@ from typing import Any, List, Optional, Tuple, Union
 import magicgui as mgui
 import numpy as np
 
+from napari.components.dims import Dims
 from napari.utils.events.evented_model import EventedModel
 
 from ...utils._dask_utils import configure_dask
@@ -42,6 +44,14 @@ from ._base_constants import Blending
 Extent = namedtuple('Extent', 'data world step')
 
 
+# Configuration should be done elsewhere, but this is good enough for now.
+logging.basicConfig(
+    format='%(levelname)s : %(asctime)s : %(threadName)s : %(pathname)s:%(lineno)d : %(message)s',
+    # level = logging.DEBUG,
+)
+LOGGER = logging.getLogger("napari.layers.base")
+
+
 def no_op(layer: Layer, event: Event) -> None:
     """
     A convenient no-op event for the layer mouse binding.
@@ -66,6 +76,7 @@ def no_op(layer: Layer, event: Event) -> None:
 
 class LayerSlice(EventedModel):
     data: Any
+    dims: Dims
 
 
 @mgui.register_type(choices=get_layers, return_callback=add_layer_to_viewer)
@@ -725,6 +736,55 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
             step=abs(data_to_world.scale),
         )
 
+    def _get_slice_indices(self, dims: Dims) -> tuple:
+        LOGGER.debug('Layer._get_slice_indices: %s', dims.current_step)
+
+        # Copied from _slice_indices and modified to not depend on slice
+        # state that we want to remove.
+
+        # If all data is display, return full slices.
+        if self.ndim < self._ndisplay:
+            return (slice(None),) * self.ndim
+
+        inv_transform = self._data_to_world.inverse
+        # Subspace spanned by non displayed dimensions
+        non_displayed_subspace = np.zeros(self.ndim)
+        for d in dims.not_displayed:
+            non_displayed_subspace[d] = 1
+        # Map subspace through inverse transform, ignoring translation
+        _inv_transform = Affine(
+            ndim=self.ndim,
+            linear_matrix=inv_transform.linear_matrix,
+            translate=None,
+        )
+        mapped_nd_subspace = _inv_transform(non_displayed_subspace)
+        # Look at displayed subspace
+        displayed_mapped_subspace = (
+            mapped_nd_subspace[d] for d in dims.displayed
+        )
+        # Check that displayed subspace is null
+        if any(abs(v) > 1e-8 for v in displayed_mapped_subspace):
+            warnings.warn(
+                trans._(
+                    'Non-orthogonal slicing is being requested, but is not fully supported. Data is displayed without applying an out-of-slice rotation or shear component.',
+                    deferred=True,
+                ),
+                category=UserWarning,
+            )
+
+        slice_inv_transform = inv_transform.set_slice(list(dims.not_displayed))
+        world_pts = [dims.point[ax] for ax in dims.not_displayed]
+        data_pts = slice_inv_transform(world_pts)
+        if getattr(self, "_round_index", True):
+            # A round is taken to convert these values to slicing integers
+            data_pts = np.round(data_pts).astype(int)
+
+        indices = [slice(None)] * self.ndim
+        for i, ax in enumerate(dims.not_displayed):
+            indices[ax] = data_pts[i]
+
+        return tuple(indices)
+
     @property
     def _slice_indices(self):
         """(D, ) array: Slice indices in data coordinates."""
@@ -933,12 +993,8 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
     def _set_view_slice(self):
         raise NotImplementedError()
 
-    def get_slice(self, world_point) -> LayerSlice:
-        data_point = self.world_to_data(world_point)
-        return self._get_slice(data_point)
-
     @abstractmethod
-    def _get_slice(self, point=None) -> LayerSlice:
+    def _get_slice(self, dims: Dims) -> LayerSlice:
         raise NotImplementedError()
 
     def _slice_dims(self, point=None, ndisplay=2, order=None) -> Any:

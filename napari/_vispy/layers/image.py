@@ -1,3 +1,4 @@
+import logging
 import warnings
 
 import numpy as np
@@ -11,6 +12,8 @@ from ..utils.gl import fix_data_dtype, get_gl_extensions
 from ..visuals.image import Image as ImageNode
 from ..visuals.volume import Volume as VolumeNode
 from .base import VispyBaseLayer
+
+LOGGER = logging.getLogger("napari._vispy.layers.image")
 
 
 class ImageLayerNode:
@@ -85,7 +88,9 @@ class VispyImageLayer(VispyBaseLayer):
         self._on_data_change()
 
     def _set_slice(self, slice: LayerSlice) -> None:
-        print('VispyImageLayer._set_slice')
+        LOGGER.debug(
+            'VispyImageLayer._set_slice : %s', slice.dims.current_step
+        )
         self._set_node_data(self.node, slice.data)
 
     def _on_display_change(self, data=None):
