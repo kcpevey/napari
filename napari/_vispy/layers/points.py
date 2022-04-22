@@ -2,7 +2,7 @@ import logging
 
 import numpy as np
 
-from napari.layers.base.base import LayerSlice
+from napari.layers.base.base import LayerSliceResponse
 
 from ...settings import get_settings
 from ...utils.colormaps.standardize_color import transform_color
@@ -44,11 +44,9 @@ class VispyPointsLayer(VispyBaseLayer):
 
         self._on_data_change()
 
-    def _set_slice(self, slice: LayerSlice) -> None:
-        LOGGER.debug(
-            'VispyPointsLayer._set_slice : %s', slice.dims.current_step
-        )
-        self.node._subvisuals[0].set_data(slice.data[:, ::-1])
+    def _set_slice(self, response: LayerSliceResponse) -> None:
+        LOGGER.debug('VispyPointsLayer._set_slice : %s', response.request)
+        self.node._subvisuals[0].set_data(response.data[:, ::-1])
 
     def _on_data_change(self):
         LOGGER.debug('VispyPointsLayer._on_data_change')

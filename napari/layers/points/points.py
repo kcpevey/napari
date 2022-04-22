@@ -8,8 +8,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import gmean
 
-from napari.components.dims import Dims
-from napari.layers.base.base import LayerSlice
+from napari.layers.base.base import LayerSliceRequest, LayerSliceResponse
 
 from ...utils.colormaps import Colormap, ValidColormapArg
 from ...utils.colormaps.standardize_color import (
@@ -1664,12 +1663,12 @@ class Points(Layer):
         )
         return start_point, end_point
 
-    def _get_slice(self, dims: Dims) -> LayerSlice:
-        LOGGER.debug('Points._get_slice : enter : %s', dims.current_step)
-        slice_indices = self._get_slice_indices(dims)
+    def _get_slice(self, request: LayerSliceRequest) -> LayerSliceResponse:
+        LOGGER.debug('Points._get_slice : %s', request)
+        slice_indices = self._get_slice_indices(request)
         indices, _ = self._slice_data(slice_indices)
-        data = self.data[np.ix_(indices, dims.displayed)]
-        return LayerSlice(data=data, dims=dims)
+        data = self.data[np.ix_(indices, request.dims_displayed)]
+        return LayerSliceResponse(request=request, data=data)
 
     def _set_view_slice(self):
         """Sets the view given the indices to slice with."""

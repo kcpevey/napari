@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 from vispy.visuals.transforms import MatrixTransform
 
-from napari.layers.base.base import LayerSlice
+from napari.layers.base.base import LayerSliceRequest
 
 from ...utils.events import disconnect_events
 from ..utils.gl import BLENDING_MODES, get_max_texture_sizes
@@ -111,7 +111,7 @@ class VispyBaseLayer(ABC):
         raise NotImplementedError()
 
     # @abstractmethod
-    def _set_slice(self, slice: LayerSlice) -> None:
+    def _set_slice(self, request: LayerSliceRequest) -> None:
         raise NotImplementedError()
 
     def _on_refresh_change(self):

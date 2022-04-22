@@ -3,7 +3,7 @@
 import numpy as np
 import napari
 
-image_data = np.random.rand(100, 1024, 1024)
+image_data = np.random.rand(1000, 256, 256)
 
 viewer = napari.view_image(image_data)
 

@@ -5,7 +5,7 @@ import numpy as np
 from vispy.color import Colormap as VispyColormap
 from vispy.scene.node import Node
 
-from napari.layers.base.base import LayerSlice
+from napari.layers.base.base import LayerSliceResponse
 
 from ...utils.translations import trans
 from ..utils.gl import fix_data_dtype, get_gl_extensions
@@ -87,11 +87,9 @@ class VispyImageLayer(VispyBaseLayer):
         self.reset()
         self._on_data_change()
 
-    def _set_slice(self, slice: LayerSlice) -> None:
-        LOGGER.debug(
-            'VispyImageLayer._set_slice : %s', slice.dims.current_step
-        )
-        self._set_node_data(self.node, slice.data)
+    def _set_slice(self, response: LayerSliceResponse) -> None:
+        LOGGER.debug('VispyImageLayer._set_slice : %s', response.request)
+        self._set_node_data(self.node, response.data)
 
     def _on_display_change(self, data=None):
         parent = self.node.parent

@@ -10,8 +10,7 @@ from typing import TYPE_CHECKING, Sequence, Union
 import numpy as np
 from scipy import ndimage as ndi
 
-from napari.components.dims import Dims
-from napari.layers.base.base import LayerSlice
+from napari.layers.base.base import LayerSliceRequest, LayerSliceResponse
 
 from ...utils import config
 from ...utils._dtype import get_dtype_limits, normalize_dtype
@@ -655,11 +654,11 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         image = raw
         return image
 
-    def _get_slice(self, dims: Dims) -> LayerSlice:
-        LOGGER.debug('Image._get_slice : %s', dims.current_step)
-        slice_indices = self._get_slice_indices(dims)
+    def _get_slice(self, request: LayerSliceRequest) -> LayerSliceResponse:
+        LOGGER.debug('Image._get_slice : %s', request)
+        slice_indices = self._get_slice_indices(request)
         data = np.asarray(self.data[slice_indices])
-        return LayerSlice(data=data, dims=dims)
+        return LayerSliceResponse(request=request, data=data)
 
     def _set_view_slice(self):
         """Set the view given the indices to slice with."""

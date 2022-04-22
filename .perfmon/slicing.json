@@ -6,6 +6,7 @@
     ],
     "callable_lists": {
         "slicing": [
+            "napari.layers.base.base.Layer._get_slice_indices",
             "napari.layers.image.image.Image._get_slice",
             "napari.layers.points.points.Points._get_slice",
             "napari._vispy.layers.image.VispyImageLayer._set_slice",

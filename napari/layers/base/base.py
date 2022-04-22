@@ -11,9 +11,7 @@ from typing import Any, List, Optional, Tuple, Union
 
 import magicgui as mgui
 import numpy as np
-
-from napari.components.dims import Dims
-from napari.utils.events.evented_model import EventedModel
+from pydantic import BaseModel
 
 from ...utils._dask_utils import configure_dask
 from ...utils._magicgui import add_layer_to_viewer, get_layers
@@ -47,7 +45,7 @@ Extent = namedtuple('Extent', 'data world step')
 # Configuration should be done elsewhere, but this is good enough for now.
 logging.basicConfig(
     format='%(levelname)s : %(asctime)s : %(threadName)s : %(pathname)s:%(lineno)d : %(message)s',
-    level=logging.DEBUG,
+    # level=logging.DEBUG,
 )
 LOGGER = logging.getLogger("napari.layers.base")
 
@@ -74,9 +72,17 @@ def no_op(layer: Layer, event: Event) -> None:
     return None
 
 
-class LayerSlice(EventedModel):
+class LayerSliceRequest(BaseModel):
+    ndim: int
+    ndisplay: int
+    point: Tuple[float, ...]
+    dims_displayed: Tuple[int, ...]
+    dims_not_displayed: Tuple[int, ...]
+
+
+class LayerSliceResponse(BaseModel):
+    request: LayerSliceRequest
     data: Any
-    dims: Dims
 
 
 @mgui.register_type(choices=get_layers, return_callback=add_layer_to_viewer)
@@ -736,8 +742,8 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
             step=abs(data_to_world.scale),
         )
 
-    def _get_slice_indices(self, dims: Dims) -> tuple:
-        LOGGER.debug('Layer._get_slice_indices: %s', dims.current_step)
+    def _get_slice_indices(self, request: LayerSliceRequest) -> tuple:
+        LOGGER.debug('Layer._get_slice_indices: %s', request)
 
         # Copied from _slice_indices and modified to not depend on slice
         # state that we want to remove.
@@ -749,7 +755,7 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
         inv_transform = self._data_to_world.inverse
         # Subspace spanned by non displayed dimensions
         non_displayed_subspace = np.zeros(self.ndim)
-        for d in dims.not_displayed:
+        for d in request.dims_not_displayed:
             non_displayed_subspace[d] = 1
         # Map subspace through inverse transform, ignoring translation
         _inv_transform = Affine(
@@ -760,7 +766,7 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
         mapped_nd_subspace = _inv_transform(non_displayed_subspace)
         # Look at displayed subspace
         displayed_mapped_subspace = (
-            mapped_nd_subspace[d] for d in dims.displayed
+            mapped_nd_subspace[d] for d in request.dims_displayed
         )
         # Check that displayed subspace is null
         if any(abs(v) > 1e-8 for v in displayed_mapped_subspace):
@@ -772,15 +778,17 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
                 category=UserWarning,
             )
 
-        slice_inv_transform = inv_transform.set_slice(list(dims.not_displayed))
-        world_pts = [dims.point[ax] for ax in dims.not_displayed]
+        slice_inv_transform = inv_transform.set_slice(
+            list(request.dims_not_displayed)
+        )
+        world_pts = [request.point[ax] for ax in request.dims_not_displayed]
         data_pts = slice_inv_transform(world_pts)
         if getattr(self, "_round_index", True):
             # A round is taken to convert these values to slicing integers
             data_pts = np.round(data_pts).astype(int)
 
         indices = [slice(None)] * self.ndim
-        for i, ax in enumerate(dims.not_displayed):
+        for i, ax in enumerate(request.dims_not_displayed):
             indices[ax] = data_pts[i]
 
         return tuple(indices)
@@ -994,7 +1002,7 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def _get_slice(self, dims: Dims) -> LayerSlice:
+    def _get_slice(self, request: LayerSliceRequest) -> LayerSliceResponse:
         raise NotImplementedError()
 
     def _slice_dims(self, point=None, ndisplay=2, order=None) -> Any:

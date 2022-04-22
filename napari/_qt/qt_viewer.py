@@ -19,7 +19,7 @@ from ..components._interaction_box_mouse_bindings import (
 )
 from ..components.camera import Camera
 from ..components.layerlist import LayerList
-from ..layers.base.base import Layer, LayerSlice
+from ..layers.base.base import Layer, LayerSliceRequest, LayerSliceResponse
 from ..plugins import _npe2
 from ..plugins.utils import get_potential_readers
 from ..utils import config, perf
@@ -76,6 +76,8 @@ from ..settings import get_settings
 from ..utils.io import imsave_extensions
 
 LOGGER = logging.getLogger("napari._qt.qt_viewer")
+
+ViewerSliceResponse = Tuple[Tuple[Layer, LayerSliceResponse], ...]
 
 
 def _npe2_decode_selected_filter(
@@ -206,9 +208,7 @@ class QtViewer(QSplitter):
         )
 
         self.slice_executor: Executor = ThreadPoolExecutor(max_workers=1)
-        self.slice_task: Optional[
-            Future[Tuple[Tuple[Layer, LayerSlice], ...]]
-        ] = None
+        self.slice_task: Optional[Future[ViewerSliceResponse]] = None
 
         self.viewer = viewer
         self.dims = QtDims(self.viewer.dims)
@@ -357,8 +357,8 @@ class QtViewer(QSplitter):
             self.slice_task.cancel()
         # Make a copy of dims from this thread, so that instance won't be
         # mutated while the task is running.
-        dims = self.viewer.dims.copy(deep=True)
-        slice_task = self.slice_executor.submit(self._slice_layers, dims)
+        request = QtViewer._make_slice_request(self.viewer.dims)
+        slice_task = self.slice_executor.submit(self._slice_layers, request)
         # The done callback seems to execute on the main thread if cancelling
         # was successful (likely because it executes immediately here, because
         # the future is done and cancelled), and otherwise on the executor's
@@ -366,25 +366,34 @@ class QtViewer(QSplitter):
         slice_task.add_done_callback(self._on_slices_ready)
         self.slice_task = slice_task
 
-    def _on_slices_ready(
-        self, task: Future[Tuple[Tuple[Layer, LayerSlice]]]
-    ) -> None:
+    @staticmethod
+    def _make_slice_request(dims: Dims) -> LayerSliceRequest:
+        # TODO: check if pydantic always copies tuples.
+        # We need a copies here to protect against the underlying values
+        # changing in the main thread.
+        return LayerSliceRequest(
+            ndim=dims.ndim,
+            ndisplay=dims.ndisplay,
+            point=dims.point,
+            dims_displayed=dims.displayed,
+            dims_not_displayed=dims.not_displayed,
+        )
+
+    def _on_slices_ready(self, task: Future[ViewerSliceResponse]) -> None:
         if task.cancelled():
+            LOGGER.debug('QtViewer._on_slices_ready : cancelled')
             return
         LOGGER.debug(
-            'QtViewer._on_slices_ready : %s',
-            task.result()[0][1].dims.current_step,
+            'QtViewer._on_slices_ready : %s', task.result()[0][1].request
         )
         for layer, layer_slice in task.result():
             vispy_layer = self.layer_to_visual[layer]
             vispy_layer._set_slice(layer_slice)
 
-    def _slice_layers(
-        self, dims: Dims
-    ) -> Tuple[Tuple[Layer, LayerSlice], ...]:
-        LOGGER.debug('QtViewer._slice_layer : %s', dims.current_step)
+    def _slice_layers(self, request: LayerSliceRequest) -> ViewerSliceResponse:
+        LOGGER.debug('QtViewer._slice_layer : %s', request)
         return tuple(
-            (layer, layer._get_slice(dims)) for layer in self.viewer.layers
+            (layer, layer._get_slice(request)) for layer in self.viewer.layers
         )
 
     def _ensure_connect(self):
