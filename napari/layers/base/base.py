@@ -45,7 +45,7 @@ Extent = namedtuple('Extent', 'data world step')
 # Configuration should be done elsewhere, but this is good enough for now.
 logging.basicConfig(
     format='%(levelname)s : %(asctime)s : %(threadName)s : %(pathname)s:%(lineno)d : %(message)s',
-    # level=logging.DEBUG,
+    level=logging.DEBUG,
 )
 LOGGER = logging.getLogger("napari.layers.base")
 

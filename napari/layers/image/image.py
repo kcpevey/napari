@@ -658,38 +658,101 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
     def _get_slice(self, request: LayerSliceRequest) -> LayerSliceResponse:
         LOGGER.debug('Image._get_slice : %s', request)
         slice_indices = self._get_slice_indices(request)
-        data = np.asarray(self.data[slice_indices])
-        # simplified is effectively guaranteed to be an affine transform
+
+        data = (
+            self._get_slice_data_multi_scale(slice_indices, request)
+            if self.multiscale
+            else self._get_slice_data(slice_indices)
+        )
+
         dims_displayed = list(request.dims_displayed)
         transform = self._transforms.simplified.set_slice(dims_displayed)
         if request.ndisplay == 2:
-            # Perform pixel offset to shift origin from top left corner
-            # of pixel to center of pixel.
-            # Note this offset is only required for array like data in
-            # 2D.
-            offset_matrix = self._data_to_world.set_slice(
-                dims_displayed
-            ).linear_matrix
-            offset = -offset_matrix @ np.ones(offset_matrix.shape[1]) / 2
-            # Convert NumPy axis ordering to VisPy axis ordering
-            # and embed in full affine matrix
-            affine_offset = np.eye(3)
-            affine_offset[: len(offset), -1] = offset
-            transform_matrix = transform.affine_matrix @ affine_offset
-            transform = Affine(affine_matrix=transform_matrix)
+            transform = self._offset_2d_image_transform(
+                transform, dims_displayed
+            )
+
         return LayerSliceResponse(
             request=request, data=data, transform=transform
         )
 
-    def _set_view_slice(self):
-        """Set the view given the indices to slice with."""
-        self._new_empty_slice()
-        not_disp = self._dims_not_displayed
+    def _offset_2d_image_transform(self, transform, dims_displayed) -> Affine:
+        # Perform pixel offset to shift origin from top left corner
+        # of pixel to center of pixel.
+        # Note this offset is only required for array like data in
+        # 2D.
+        offset_matrix = self._data_to_world.set_slice(
+            dims_displayed
+        ).linear_matrix
+        offset = -offset_matrix @ np.ones(offset_matrix.shape[1]) / 2
+        # Convert NumPy axis ordering to VisPy axis ordering
+        # and embed in full affine matrix
+        affine_offset = np.eye(3)
+        affine_offset[: len(offset), -1] = offset
+        transform_matrix = transform.affine_matrix @ affine_offset
+        return Affine(affine_matrix=transform_matrix)
 
-        # Check if requested slice outside of data range
-        indices = np.array(self._slice_indices)
+    def _get_slice_data(self, slice_indices) -> np.ndarray:
+        return np.asarray(self.data[slice_indices])
+
+    def _get_slice_data_multi_scale(
+        self, slice_indices, request: LayerSliceRequest
+    ) -> np.ndarray:
+        if request.ndisplay == 3:
+            warnings.warn(
+                trans._(
+                    'Multiscale rendering is only supported in 2D. In 3D, only the lowest resolution scale is displayed',
+                    deferred=True,
+                ),
+                category=UserWarning,
+            )
+            # TODO: always infer data level when slicing rather than mutating/relying on state.
+            self.data_level = len(self.data) - 1
+
+        level = self.data_level
+        indices = self._get_downsampled_indices(
+            slice_indices, list(request.dims_not_displayed), level
+        )
+
+        scale = np.ones(self.ndim)
+        for d in request.dims_displayed:
+            scale[d] = self.downsample_factors[self.data_level][d]
+
+        # TODO: instead of mutating tile2data, we should just fold the scale
+        # and translate associated with the tile into the response's transform.
+        self._transforms['tile2data'].scale = scale
+
+        if self._ndisplay == 2:
+            for d in request.dims_displayed:
+                indices[d] = slice(
+                    self.corner_pixels[0, d],
+                    self.corner_pixels[1, d],
+                    1,
+                )
+            self._transforms['tile2data'].translate = (
+                self.corner_pixels[0] * self._transforms['tile2data'].scale
+            )
+        return np.asarray(self.data[level][tuple(indices)])
+
+    def _get_downsampled_indices(self, indices, not_disp, level) -> np.ndarray:
+        indices = np.array(indices)
+        downsampled_indices = (
+            indices[not_disp] / self.downsample_factors[level, not_disp]
+        )
+        downsampled_indices = np.round(
+            downsampled_indices.astype(float)
+        ).astype(int)
+        downsampled_indices = np.clip(
+            downsampled_indices,
+            0,
+            self.level_shapes[level, not_disp] - 1,
+        )
+        indices[not_disp] = downsampled_indices
+        return indices
+
+    def _are_slice_indices_out_of_range(self, indices, not_disp) -> bool:
         extent = self._extent_data
-        if np.any(
+        return np.any(
             np.less(
                 [indices[ax] for ax in not_disp],
                 [extent[0, ax] for ax in not_disp],
@@ -699,8 +762,16 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
                 [indices[ax] for ax in not_disp],
                 [extent[1, ax] for ax in not_disp],
             )
-        ):
+        )
+
+    def _set_view_slice(self):
+        """Set the view given the indices to slice with."""
+        self._new_empty_slice()
+        not_disp = self._dims_not_displayed
+
+        if self._are_slice_indices_out_of_range(self._slice_indices, not_disp):
             return
+
         self._empty = False
 
         if self.multiscale:
@@ -717,17 +788,9 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
 
             # Slice currently viewed level
             level = self.data_level
-            indices = np.array(self._slice_indices)
-            downsampled_indices = (
-                indices[not_disp] / self.downsample_factors[level, not_disp]
+            indices = self._get_downsampled_indices(
+                self._slice_indices, not_disp, level
             )
-            downsampled_indices = np.round(
-                downsampled_indices.astype(float)
-            ).astype(int)
-            downsampled_indices = np.clip(
-                downsampled_indices, 0, self.level_shapes[level, not_disp] - 1
-            )
-            indices[not_disp] = downsampled_indices
 
             scale = np.ones(self.ndim)
             for d in self._dims_displayed:
@@ -748,21 +811,9 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
             image_indices = indices
 
             # Slice thumbnail
-            indices = np.array(self._slice_indices)
-            downsampled_indices = (
-                indices[not_disp]
-                / self.downsample_factors[self._thumbnail_level, not_disp]
+            indices = self._get_downsampled_indices(
+                self._slice_indices, not_disp, self._thumbnail_level
             )
-            downsampled_indices = np.round(
-                downsampled_indices.astype(float)
-            ).astype(int)
-            downsampled_indices = np.clip(
-                downsampled_indices,
-                0,
-                self.level_shapes[self._thumbnail_level, not_disp] - 1,
-            )
-            indices[not_disp] = downsampled_indices
-
             thumbnail_source = self.data[self._thumbnail_level][tuple(indices)]
         else:
             self._transforms['tile2data'].scale = np.ones(self.ndim)
