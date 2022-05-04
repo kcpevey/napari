@@ -11,7 +11,7 @@ from ...utils.translations import trans
 from ..utils.gl import fix_data_dtype, get_gl_extensions
 from ..visuals.image import Image as ImageNode
 from ..visuals.volume import Volume as VolumeNode
-from .base import VispyBaseLayer
+from .base import VispyBaseLayer, _prepare_transform
 
 LOGGER = logging.getLogger("napari._vispy.layers.image")
 
@@ -89,7 +89,8 @@ class VispyImageLayer(VispyBaseLayer):
 
     def _set_slice(self, response: LayerSliceResponse) -> None:
         LOGGER.debug('VispyImageLayer._set_slice : %s', response.request)
-        self._set_node_data(self.node, response.data)
+        self._set_node_data(self.node, response.data, update_matrix=False)
+        self._master_transform.matrix = _prepare_transform(response.transform)
 
     def _on_display_change(self, data=None):
         parent = self.node.parent
@@ -121,7 +122,7 @@ class VispyImageLayer(VispyBaseLayer):
 
         self._set_node_data(self.node, self.layer._data_view)
 
-    def _set_node_data(self, node, data):
+    def _set_node_data(self, node, data, update_matrix=True):
         """Our self.layer._data_view has been updated, update our node."""
 
         data = fix_data_dtype(data)
@@ -151,8 +152,9 @@ class VispyImageLayer(VispyBaseLayer):
             node.visible = self.layer.visible
 
         # Call to update order of translation values with new dims:
-        self._on_matrix_change()
-        node.update()
+        if update_matrix:
+            self._on_matrix_change()
+            node.update()
 
     def _on_interpolation_change(self):
         self.node.interpolation = self.layer.interpolation

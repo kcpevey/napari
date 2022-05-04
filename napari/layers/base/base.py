@@ -83,6 +83,7 @@ class LayerSliceRequest(BaseModel):
 class LayerSliceResponse(BaseModel):
     request: LayerSliceRequest
     data: Any
+    transform: Any
 
 
 @mgui.register_type(choices=get_layers, return_callback=add_layer_to_viewer)

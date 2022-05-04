@@ -1668,7 +1668,13 @@ class Points(Layer):
         slice_indices = self._get_slice_indices(request)
         indices, _ = self._slice_data(slice_indices)
         data = self.data[np.ix_(indices, request.dims_displayed)]
-        return LayerSliceResponse(request=request, data=data)
+        # simplified is effectively guaranteed to be an affine transform
+        transform = self._transforms.simplified.set_slice(
+            list(request.dims_displayed)
+        )
+        return LayerSliceResponse(
+            request=request, data=data, transform=transform
+        )
 
     def _set_view_slice(self):
         """Sets the view given the indices to slice with."""

@@ -11,6 +11,7 @@ import numpy as np
 from scipy import ndimage as ndi
 
 from napari.layers.base.base import LayerSliceRequest, LayerSliceResponse
+from napari.utils.transforms.transforms import Affine
 
 from ...utils import config
 from ...utils._dtype import get_dtype_limits, normalize_dtype
@@ -658,7 +659,27 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         LOGGER.debug('Image._get_slice : %s', request)
         slice_indices = self._get_slice_indices(request)
         data = np.asarray(self.data[slice_indices])
-        return LayerSliceResponse(request=request, data=data)
+        # simplified is effectively guaranteed to be an affine transform
+        dims_displayed = list(request.dims_displayed)
+        transform = self._transforms.simplified.set_slice(dims_displayed)
+        if request.ndisplay == 2:
+            # Perform pixel offset to shift origin from top left corner
+            # of pixel to center of pixel.
+            # Note this offset is only required for array like data in
+            # 2D.
+            offset_matrix = self._data_to_world.set_slice(
+                dims_displayed
+            ).linear_matrix
+            offset = -offset_matrix @ np.ones(offset_matrix.shape[1]) / 2
+            # Convert NumPy axis ordering to VisPy axis ordering
+            # and embed in full affine matrix
+            affine_offset = np.eye(3)
+            affine_offset[: len(offset), -1] = offset
+            transform_matrix = transform.affine_matrix @ affine_offset
+            transform = Affine(affine_matrix=transform_matrix)
+        return LayerSliceResponse(
+            request=request, data=data, transform=transform
+        )
 
     def _set_view_slice(self):
         """Set the view given the indices to slice with."""
