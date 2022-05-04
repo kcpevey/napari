@@ -4,7 +4,6 @@
 
 import time
 
-import dask.array as da
 import numpy as np
 import zarr
 from qtpy.QtWidgets import QApplication
@@ -13,24 +12,29 @@ import napari
 from napari.layers import Image
 
 
+class SlowMemoryStore(zarr.storage.MemoryStore):
+    def __init__(self, load_delay, *args, **kwargs):
+        self.load_delay = load_delay
+        super().__init__(*args, **kwargs)
+
+    def __getitem__(self, item: str):
+        time.sleep(self.load_delay)
+        return super().__getitem__(item)
+
+
 class AsyncImage2DSuite:
     chunksize = [256, 512, 1024, 2048]
     latency = [0.05 * i for i in range(0, 4)]
-
     params = (latency, chunksize)
 
     def setup(self, latency, chunksize):
-        @da.as_gufunc(signature="()->()")
-        def slow_data(x):
-            time.sleep(latency)
-            return x
-
-        self.zarr = zarr.zeros(
-            (64, 2048, 2048), chunks=(1, chunksize, chunksize), dtype='uint8'
+        store = SlowMemoryStore(load_delay=latency)
+        self.data = zarr.zeros(
+            (64, 2048, 2048),
+            chunks=(1, chunksize, chunksize),
+            dtype='uint8',
+            store=store,
         )
-        self.zarr[:, :, :] = np.random.randint(0, 255, size=self.zarr.shape)
-        self.data = slow_data(da.from_zarr(self.zarr))
-
         self.layer = Image(self.data)
 
     def time_create_layer(self, *args):
@@ -52,26 +56,25 @@ class QtViewerAsyncImage2DSuite:
     params = (latency, chunksize)
 
     def setup(self, latency, chunksize):
+        store = SlowMemoryStore(load_delay=latency)
         _ = QApplication.instance() or QApplication([])
 
-        @da.as_gufunc(signature="()->()")
-        def slow_data(x):
-            time.sleep(latency)
-            return x
-
-        self.zarr = zarr.zeros(
-            (32, 2048, 2048), chunks=(1, chunksize, chunksize), dtype='uint8'
+        self.data = zarr.zeros(
+            (64, 2048, 2048),
+            chunks=(1, chunksize, chunksize),
+            dtype='uint8',
+            store=store,
         )
-        self.zarr[:, :, :] = np.random.randint(0, 255, size=self.zarr.shape)
-        self.data = slow_data(da.from_zarr(self.zarr))
 
         self.viewer = napari.Viewer()
         self.viewer.add_image(self.data)
-        # self.viewer = napari.view_image(self.data)
 
     def time_z_scroll(self, *args):
         for z in range(self.data.shape[0]):
             self.viewer.dims.set_current_step(0, z)
+
+    def teardown(self, *args):
+        self.viewer.window.close()
 
 
 class QtViewerAsyncPointsSuite:
@@ -93,6 +96,9 @@ class QtViewerAsyncPointsSuite:
         for z in range(self.empty_image.shape[0]):
             self.viewer.dims.set_current_step(0, z)
 
+    def teardown(self, *args):
+        self.viewer.window.close()
+
 
 class QtViewerAsyncPointsAndImage2DSuite:
     n_points = [2**i for i in range(12, 18, 2)]
@@ -101,20 +107,17 @@ class QtViewerAsyncPointsAndImage2DSuite:
     params = (n_points, latency, chunksize)
 
     def setup(self, n_points, latency, chunksize):
+        store = SlowMemoryStore(load_delay=latency)
         _ = QApplication.instance() or QApplication([])
 
         np.random.seed(0)
 
-        @da.as_gufunc(signature="()->()")
-        def slow_data(x):
-            time.sleep(latency)
-            return x
-
-        self.zarr = zarr.zeros(
-            (32, 2048, 2048), chunks=(1, chunksize, chunksize), dtype='uint8'
+        self.image_data = zarr.zeros(
+            (64, 2048, 2048),
+            chunks=(1, chunksize, chunksize),
+            dtype='uint8',
+            store=store,
         )
-        self.zarr[:, :, :] = np.random.randint(0, 255, size=self.zarr.shape)
-        self.image_data = slow_data(da.from_zarr(self.zarr))
 
         self.viewer = napari.Viewer()
         self.viewer.add_image(self.image_data)
@@ -124,3 +127,6 @@ class QtViewerAsyncPointsAndImage2DSuite:
     def time_z_scroll(self, *args):
         for z in range(self.image_data.shape[0]):
             self.viewer.dims.set_current_step(0, z)
+
+    def teardown(self, *args):
+        self.viewer.window.close()
