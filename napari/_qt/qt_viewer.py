@@ -4,7 +4,7 @@ import logging
 import os
 import warnings
 from concurrent.futures import Executor, Future, ThreadPoolExecutor
-from typing import TYPE_CHECKING, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple
 from weakref import WeakSet
 
 import numpy as np
@@ -357,8 +357,11 @@ class QtViewer(QSplitter):
             self.slice_task.cancel()
         # Make a copy of dims from this thread, so that instance won't be
         # mutated while the task is running.
-        request = QtViewer._make_slice_request(self.viewer.dims)
-        slice_task = self.slice_executor.submit(self._slice_layers, request)
+        requests = {
+            layer: layer._make_slice_request(self.viewer.dims)
+            for layer in self.viewer.layers
+        }
+        slice_task = self.slice_executor.submit(self._slice_layers, requests)
         # The done callback seems to execute on the main thread if cancelling
         # was successful (likely because it executes immediately here, because
         # the future is done and cancelled), and otherwise on the executor's
@@ -379,10 +382,13 @@ class QtViewer(QSplitter):
             dims_not_displayed=dims.not_displayed,
         )
 
-    def _slice_layers(self, request: LayerSliceRequest) -> ViewerSliceResponse:
-        LOGGER.debug('QtViewer._slice_layer : %s', request)
+    def _slice_layers(
+        self, requests: Dict[Layer, LayerSliceRequest]
+    ) -> ViewerSliceResponse:
+        LOGGER.debug('QtViewer._slice_layers : %s', requests)
         return tuple(
-            (layer, layer._get_slice(request)) for layer in self.viewer.layers
+            (layer, layer._get_slice(requests[layer]))
+            for layer in self.viewer.layers
         )
 
     def _on_slices_ready(self, task: Future[ViewerSliceResponse]) -> None:

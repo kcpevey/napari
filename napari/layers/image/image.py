@@ -722,7 +722,7 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         # and translate associated with the tile into the response's transform.
         self._transforms['tile2data'].scale = scale
 
-        if self._ndisplay == 2:
+        if request.ndisplay == 2:
             for d in request.dims_displayed:
                 indices[d] = slice(
                     self.corner_pixels[0, d],

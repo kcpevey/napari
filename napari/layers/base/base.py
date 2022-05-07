@@ -13,6 +13,8 @@ import magicgui as mgui
 import numpy as np
 from pydantic import BaseModel
 
+from napari.components.dims import Dims
+
 from ...utils._dask_utils import configure_dask
 from ...utils._magicgui import add_layer_to_viewer, get_layers
 from ...utils.events import EmitterGroup, Event
@@ -743,6 +745,17 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
             step=abs(data_to_world.scale),
         )
 
+    def _make_slice_request(self, dims: Dims) -> LayerSliceRequest:
+        offset = dims.ndim - self.ndim
+        order = [i - offset for i in dims.order if i >= offset]
+        return LayerSliceRequest(
+            ndim=self.ndim,
+            ndisplay=dims.ndisplay,
+            point=dims.point[offset:],
+            dims_displayed=order[-self._ndisplay :],
+            dims_not_displayed=order[: -self._ndisplay],
+        )
+
     def _get_slice_indices(self, request: LayerSliceRequest) -> tuple:
         LOGGER.debug('Layer._get_slice_indices: %s', request)
 
@@ -750,17 +763,17 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
         # state that we want to remove.
 
         # If all data is display, return full slices.
-        if self.ndim < self._ndisplay:
-            return (slice(None),) * self.ndim
+        if request.ndim < request.ndisplay:
+            return (slice(None),) * request.ndim
 
         inv_transform = self._data_to_world.inverse
         # Subspace spanned by non displayed dimensions
-        non_displayed_subspace = np.zeros(self.ndim)
+        non_displayed_subspace = np.zeros(request.ndim)
         for d in request.dims_not_displayed:
             non_displayed_subspace[d] = 1
         # Map subspace through inverse transform, ignoring translation
         _inv_transform = Affine(
-            ndim=self.ndim,
+            ndim=request.ndim,
             linear_matrix=inv_transform.linear_matrix,
             translate=None,
         )
@@ -788,7 +801,7 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
             # A round is taken to convert these values to slicing integers
             data_pts = np.round(data_pts).astype(int)
 
-        indices = [slice(None)] * self.ndim
+        indices = [slice(None)] * request.ndim
         for i, ax in enumerate(request.dims_not_displayed):
             indices[ax] = data_pts[i]
 
@@ -1606,6 +1619,12 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
         shape_threshold : tuple
             Requested shape of field of view in data coordinates.
         """
+        LOGGER.debug(
+            '_update_draw: %s, %s, %s',
+            scale_factor,
+            list(corner_pixels_displayed),
+            shape_threshold,
+        )
         self.scale_factor = scale_factor
 
         displayed_axes = self._displayed_axes
