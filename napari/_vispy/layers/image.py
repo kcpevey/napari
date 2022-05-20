@@ -89,11 +89,7 @@ class VispyImageLayer(VispyBaseLayer):
     def _set_slice(self, response: LayerSliceResponse) -> None:
         LOGGER.debug('VispyImageLayer._set_slice : %s', response.request)
 
-        data = response.data
-        LOGGER.debug('data: %s', data)
-        LOGGER.debug('transform: %s', response.transform.affine_matrix)
-
-        data = fix_data_dtype(data)
+        data = fix_data_dtype(response.data)
 
         # Check if ndisplay has changed current node type needs updating
         if (

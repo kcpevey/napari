@@ -379,8 +379,7 @@ class QtViewer(QSplitter):
     ) -> ViewerSliceResponse:
         LOGGER.debug('QtViewer._slice_layers : %s', requests)
         return tuple(
-            (layer, layer._get_slice(requests[layer]))
-            for layer in self.viewer.layers
+            (layer, layer._get_slice(requests[layer])) for layer in requests
         )
 
     def _on_slices_ready(self, task: Future[ViewerSliceResponse]) -> None:
