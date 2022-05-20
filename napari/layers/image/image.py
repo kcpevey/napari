@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import types
 import warnings
-from typing import TYPE_CHECKING, Sequence, Union
+from typing import TYPE_CHECKING, Sequence, Tuple, Union
 
 import numpy as np
 from scipy import ndimage as ndi
@@ -659,14 +659,18 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         LOGGER.debug('Image._get_slice : %s', request)
         slice_indices = self._get_slice_indices(request)
 
-        data = (
+        data, tile_to_data = (
             self._get_slice_data_multi_scale(slice_indices, request)
             if self.multiscale
             else self._get_slice_data(slice_indices)
         )
 
+        full_transform = self._transforms.simplified
+        if tile_to_data is not None:
+            full_transform = tile_to_data.compose(full_transform)
+
         dims_displayed = list(request.dims_displayed)
-        transform = self._transforms.simplified.set_slice(dims_displayed)
+        transform = full_transform.set_slice(dims_displayed)
         if request.ndisplay == 2:
             transform = self._offset_2d_image_transform(
                 transform, dims_displayed
@@ -692,12 +696,12 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         transform_matrix = transform.affine_matrix @ affine_offset
         return Affine(affine_matrix=transform_matrix)
 
-    def _get_slice_data(self, slice_indices) -> np.ndarray:
-        return np.asarray(self.data[slice_indices])
+    def _get_slice_data(self, slice_indices) -> Tuple[np.ndarray, None]:
+        return np.asarray(self.data[slice_indices]), None
 
     def _get_slice_data_multi_scale(
         self, slice_indices, request: LayerSliceRequest
-    ) -> np.ndarray:
+    ) -> Tuple[np.ndarray, Affine]:
         if request.ndisplay == 3:
             warnings.warn(
                 trans._(
@@ -718,9 +722,9 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         for d in request.dims_displayed:
             scale[d] = self.downsample_factors[self.data_level][d]
 
-        # TODO: instead of mutating tile2data, we should just fold the scale
-        # and translate associated with the tile into the response's transform.
-        self._transforms['tile2data'].scale = scale
+        # TODO : this only needs to be a ScaleTranslate but different types
+        # of transforms in a chain don't play nicely together right now.
+        tile_to_data = Affine(scale=scale)
 
         if request.ndisplay == 2:
             for d in request.dims_displayed:
@@ -729,10 +733,8 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
                     self.corner_pixels[1, d],
                     1,
                 )
-            self._transforms['tile2data'].translate = (
-                self.corner_pixels[0] * self._transforms['tile2data'].scale
-            )
-        return np.asarray(self.data[level][tuple(indices)])
+            tile_to_data.translate = self.corner_pixels[0] * tile_to_data.scale
+        return np.asarray(self.data[level][tuple(indices)]), tile_to_data
 
     def _get_downsampled_indices(self, indices, not_disp, level) -> np.ndarray:
         indices = np.array(indices)
@@ -980,6 +982,9 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         if self.multiscale:
             # for multiscale data map the coordinate from the data back to
             # the tile
+            # TODO: if async slicing no longer mutates/relies on tile2data
+            # then how does this work? Should _get_value be a variant of
+            # _get_slice.
             coord = self._transforms['tile2data'].inverse(position)
         else:
             coord = position
