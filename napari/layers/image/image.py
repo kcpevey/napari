@@ -710,7 +710,8 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
                 ),
                 category=UserWarning,
             )
-            # TODO: always infer data level when slicing rather than mutating/relying on state.
+            # TODO: always infer data level and corners when slicing rather than mutating/relying on state
+            # that is changed in Layer._update_draw
             self.data_level = len(self.data) - 1
 
         level = self.data_level
