@@ -221,7 +221,6 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
         * `data` property (setter & getter)
 
     May define the following:
-        * `_set_view_slice()`: called to set currently viewed slice
         * `_basename()`: base/default name of the layer
     """
 
@@ -339,6 +338,7 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
             cursor_size=Event,
             editable=Event,
             loaded=Event,
+            set_view_slice=Event,
             _ndisplay=Event,
             select=WarningEmitter(
                 trans._(
@@ -752,8 +752,8 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
             ndim=self.ndim,
             ndisplay=dims.ndisplay,
             point=dims.point[offset:],
-            dims_displayed=order[-self._ndisplay :],
-            dims_not_displayed=order[: -self._ndisplay],
+            dims_displayed=order[-dims.ndisplay :],
+            dims_not_displayed=order[: -dims.ndisplay],
         )
 
     def _get_slice_indices(self, request: LayerSliceRequest) -> tuple:
@@ -1009,11 +1009,7 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
 
     def set_view_slice(self):
         with self.dask_optimized_slicing():
-            self._set_view_slice()
-
-    @abstractmethod
-    def _set_view_slice(self):
-        raise NotImplementedError()
+            self.events.set_view_slice(layer=self)
 
     @abstractmethod
     def _get_slice(self, request: LayerSliceRequest) -> LayerSliceResponse:
@@ -1264,7 +1260,6 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
         """Refresh all layer data based on current view slice."""
         if self.visible:
             self.set_view_slice()
-            self.events.set_data()  # refresh is called in _update_dims which means that extent cache is invalidated. Then, base on this event extent cache in layerlist is invalidated.
             self._update_thumbnail()
             self._set_highlight(force=True)
 

@@ -12,8 +12,6 @@ from qtpy.QtCore import QCoreApplication, QObject, Qt
 from qtpy.QtGui import QCursor, QGuiApplication
 from qtpy.QtWidgets import QFileDialog, QSplitter, QVBoxLayout, QWidget
 
-from napari.components.dims import Dims
-
 from ..components._interaction_box_mouse_bindings import (
     InteractionBoxMouseBindings,
 )
@@ -346,6 +344,13 @@ class QtViewer(QSplitter):
         # bind shortcuts stored in settings last.
         self._bind_shortcuts()
 
+    def _set_view_slice(self, event) -> None:
+        layer = event.layer
+        LOGGER.debug('QtViewer._set_view_slice: %s', layer)
+        requests = {layer: layer._make_slice_request(self.viewer.dims)}
+        response = self._slice_layers(requests)
+        self._handle_slice_response(response)
+
     def _slice_layers_async(self) -> None:
         LOGGER.debug(
             'QtViewer._slice_layers_async : %s', self.viewer.dims.current_step
@@ -369,19 +374,6 @@ class QtViewer(QSplitter):
         slice_task.add_done_callback(self._on_slices_ready)
         self.slice_task = slice_task
 
-    @staticmethod
-    def _make_slice_request(dims: Dims) -> LayerSliceRequest:
-        # TODO: check if pydantic always copies tuples.
-        # We need a copies here to protect against the underlying values
-        # changing in the main thread.
-        return LayerSliceRequest(
-            ndim=dims.ndim,
-            ndisplay=dims.ndisplay,
-            point=dims.point,
-            dims_displayed=dims.displayed,
-            dims_not_displayed=dims.not_displayed,
-        )
-
     def _slice_layers(
         self, requests: Dict[Layer, LayerSliceRequest]
     ) -> ViewerSliceResponse:
@@ -398,7 +390,13 @@ class QtViewer(QSplitter):
         LOGGER.debug(
             'QtViewer._on_slices_ready : %s', task.result()[0][1].request
         )
-        for layer, layer_slice in task.result():
+        self._handle_slice_response(task.result())
+
+    def _handle_slice_response(self, response: ViewerSliceResponse) -> None:
+        LOGGER.debug(
+            'QtViewer._handle_slice_response: %s', response[0][1].request
+        )
+        for layer, layer_slice in response:
             vispy_layer = self.layer_to_visual[layer]
             vispy_layer._set_slice(layer_slice)
 
@@ -563,6 +561,7 @@ class QtViewer(QSplitter):
         layer : napari.layers.Layer
             Layer to be added.
         """
+        layer.events.set_view_slice.connect(self._set_view_slice)
         vispy_layer = create_vispy_visual(layer)
 
         # QtPoll is experimental.

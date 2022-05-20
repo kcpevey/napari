@@ -58,7 +58,6 @@ class VispyBaseLayer(ABC):
         ) = get_max_texture_sizes()
 
         self.layer.events.refresh.connect(self._on_refresh_change)
-        self.layer.events.set_data.connect(self._on_data_change)
         self.layer.events.visible.connect(self._on_visible_change)
         self.layer.events.opacity.connect(self._on_opacity_change)
         self.layer.events.blending.connect(self._on_blending_change)

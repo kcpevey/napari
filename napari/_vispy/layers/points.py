@@ -42,8 +42,6 @@ class VispyPointsLayer(VispyBaseLayer):
             self._on_canvas_size_limits_change
         )
 
-        self._on_data_change()
-
     def _set_slice(self, response: LayerSliceResponse) -> None:
         LOGGER.debug('VispyPointsLayer._set_slice : %s', response.request)
         self.node._subvisuals[0].set_data(response.data[:, ::-1])
@@ -51,47 +49,7 @@ class VispyPointsLayer(VispyBaseLayer):
 
     def _on_data_change(self):
         LOGGER.debug('VispyPointsLayer._on_data_change')
-        if len(self.layer._indices_view) > 0:
-            edge_color = self.layer._view_edge_color
-            face_color = self.layer._view_face_color
-        else:
-            edge_color = np.array([[0.0, 0.0, 0.0, 1.0]], dtype=np.float32)
-            face_color = np.array([[1.0, 1.0, 1.0, 1.0]], dtype=np.float32)
-
-        # Set vispy data, noting that the order of the points needs to be
-        # reversed to make the most recently added point appear on top
-        # and the rows / columns need to be switched for vispy's x / y ordering
-        if len(self.layer._indices_view) == 0:
-            data = np.zeros((1, self.layer._ndisplay))
-            size = [0]
-            edge_width = [0]
-        else:
-            data = self.layer._view_data
-            size = self.layer._view_size
-            edge_width = self.layer._view_edge_width
-
-        set_data = self.node._subvisuals[0].set_data
-
-        if self.layer.edge_width_is_relative:
-            edge_kw = {
-                'edge_width': None,
-                'edge_width_rel': edge_width,
-            }
-        else:
-            edge_kw = {
-                'edge_width': edge_width,
-                'edge_width_rel': None,
-            }
-
-        set_data(
-            data[:, ::-1],
-            size=size,
-            **edge_kw,
-            edge_color=edge_color,
-            face_color=face_color,
-        )
-
-        self.reset()
+        pass
 
     def _on_symbol_change(self):
         self.node.symbol = self.layer.symbol

@@ -85,14 +85,35 @@ class VispyImageLayer(VispyBaseLayer):
         # in order to set the appropriate node first
         self._on_display_change()
         self.reset()
-        self._on_data_change()
 
     def _set_slice(self, response: LayerSliceResponse) -> None:
         LOGGER.debug('VispyImageLayer._set_slice : %s', response.request)
-        self._set_node_data(self.node, response.data, update_matrix=False)
+
+        data = response.data
+        LOGGER.debug('data: %s', data)
+        LOGGER.debug('transform: %s', response.transform.affine_matrix)
+
+        data = fix_data_dtype(data)
+
+        # Check if ndisplay has changed current node type needs updating
+        if (
+            response.request.ndisplay == 3
+            and not isinstance(self.node, VolumeNode)
+        ) or (
+            response.request.ndisplay == 2
+            and not isinstance(self.node, ImageNode)
+        ):
+            self._on_display_change(data)
+
+        self.node.set_data(data)
+
+        # TODO: If layer is not visible, then we should skip slicing altogether.
+        self.node.visible = self.layer.visible
+
         self._master_transform.matrix = _prepare_transform(response.transform)
 
     def _on_display_change(self, data=None):
+        LOGGER.debug('VispyImageLayer._on_display_change')
         parent = self.node.parent
         self.node.parent = None
 
@@ -100,14 +121,9 @@ class VispyImageLayer(VispyBaseLayer):
 
         if data is None:
             data = np.zeros((1,) * self.layer._ndisplay, dtype=np.float32)
+        self.node.set_data(data)
 
-        if self.layer._empty:
-            self.node.visible = False
-        else:
-            self.node.visible = self.layer.visible
-
-        if self.layer.loaded:
-            self.node.set_data(data)
+        self.node.visible = self.layer.visible
 
         self.node.parent = parent
         self.node.order = self.order
@@ -115,46 +131,7 @@ class VispyImageLayer(VispyBaseLayer):
 
     def _on_data_change(self):
         LOGGER.debug('VispyImageLayer._on_data_change')
-        if not self.layer.loaded:
-            # Do nothing if we are not yet loaded. Calling astype below could
-            # be very expensive. Lets not do it until our data has been loaded.
-            return
-
-        self._set_node_data(self.node, self.layer._data_view)
-
-    def _set_node_data(self, node, data, update_matrix=True):
-        """Our self.layer._data_view has been updated, update our node."""
-
-        data = fix_data_dtype(data)
-
-        if self.layer._ndisplay == 3 and self.layer.ndim == 2:
-            data = np.expand_dims(data, axis=0)
-
-        # Check if data exceeds MAX_TEXTURE_SIZE and downsample
-        if self.MAX_TEXTURE_SIZE_2D is not None and self.layer._ndisplay == 2:
-            data = self.downsample_texture(data, self.MAX_TEXTURE_SIZE_2D)
-        elif (
-            self.MAX_TEXTURE_SIZE_3D is not None and self.layer._ndisplay == 3
-        ):
-            data = self.downsample_texture(data, self.MAX_TEXTURE_SIZE_3D)
-
-        # Check if ndisplay has changed current node type needs updating
-        if (
-            self.layer._ndisplay == 3 and not isinstance(node, VolumeNode)
-        ) or (self.layer._ndisplay == 2 and not isinstance(node, ImageNode)):
-            self._on_display_change(data)
-        else:
-            node.set_data(data)
-
-        if self.layer._empty:
-            node.visible = False
-        else:
-            node.visible = self.layer.visible
-
-        # Call to update order of translation values with new dims:
-        if update_matrix:
-            self._on_matrix_change()
-            node.update()
+        pass
 
     def _on_interpolation_change(self):
         self.node.interpolation = self.layer.interpolation

@@ -5,10 +5,9 @@ from __future__ import annotations
 import logging
 import types
 import warnings
-from typing import TYPE_CHECKING, Sequence, Tuple, Union
+from typing import Sequence, Tuple, Union
 
 import numpy as np
-from scipy import ndimage as ndi
 
 from napari.layers.base.base import LayerSliceRequest, LayerSliceResponse
 from napari.utils.transforms.transforms import Affine
@@ -38,13 +37,7 @@ from ._image_mouse_bindings import (
 from ._image_mouse_bindings import (
     set_plane_position as plane_double_click_callback,
 )
-from ._image_slice import ImageSlice
-from ._image_slice_data import ImageSliceData
 from ._image_utils import guess_multiscale, guess_rgb
-
-if TYPE_CHECKING:
-    from ...components.experimental.chunk import ChunkRequest
-
 
 LOGGER = logging.getLogger("napari.layers.image")
 
@@ -206,10 +199,6 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
 
     Notes
     -----
-    _data_view : array (N, M), (N, M, 3), or (N, M, 4)
-        Image data for the currently viewed slice. Must be 2D image data, but
-        can be multidimensional for RGB or RGBA images if multidimensional is
-        `True`.
     _colorbar : array
         Colorbar for current colormap.
     """
@@ -324,8 +313,6 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
             self._data_level
         ][displayed_axes]
 
-        self._new_empty_slice()
-
         # Set contrast limits, colormaps and plane parameters
         self._gamma = gamma
         self._iso_threshold = iso_threshold
@@ -366,21 +353,6 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         # Trigger generation of view slice and thumbnail
         self._update_dims()
 
-    def _new_empty_slice(self):
-        """Initialize the current slice to an empty image."""
-        wrapper = _weakref_hide(self)
-        self._slice = ImageSlice(
-            self._get_empty_image(), wrapper._raw_to_displayed, self.rgb
-        )
-        self._empty = True
-
-    def _get_empty_image(self):
-        """Get empty image to use as the default before data is loaded."""
-        if self.rgb:
-            return np.zeros((1,) * self._ndisplay + (3,))
-        else:
-            return np.zeros((1,) * self._ndisplay)
-
     def _get_order(self):
         """Return the order of the displayed dimensions."""
         if self.rgb:
@@ -392,11 +364,6 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
             )
         else:
             return self._dims_displayed_order
-
-    @property
-    def _data_view(self):
-        """Viewable image for the current slice. (compatibility)"""
-        return self._slice.image.view
 
     def _calc_data_range(self, mode='data'):
         if mode == 'data':
@@ -591,15 +558,6 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         self._plane.update(value)
 
     @property
-    def loaded(self):
-        """Has the data for this layer been loaded yet.
-
-        With asynchronous loading the layer might exist but its data
-        for the current slice has not been loaded.
-        """
-        return self._slice.loaded
-
-    @property
     def mode(self) -> str:
         """str: Interactive mode
 
@@ -676,6 +634,10 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
                 transform, dims_displayed
             )
 
+        # TODO: expand dims of data if ndisplay is 3 and ndim is 2.
+
+        # TODO: downsample data if it exceeds GL texture max size.
+
         return LayerSliceResponse(
             request=request, data=data, transform=transform
         )
@@ -723,7 +685,7 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         for d in request.dims_displayed:
             scale[d] = self.downsample_factors[self.data_level][d]
 
-        # TODO : this only needs to be a ScaleTranslate but different types
+        # This only needs to be a ScaleTranslate but different types
         # of transforms in a chain don't play nicely together right now.
         tile_to_data = Affine(scale=scale)
 
@@ -767,205 +729,10 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
             )
         )
 
-    def _set_view_slice(self):
-        """Set the view given the indices to slice with."""
-        self._new_empty_slice()
-        not_disp = self._dims_not_displayed
-
-        if self._are_slice_indices_out_of_range(self._slice_indices, not_disp):
-            return
-
-        self._empty = False
-
-        if self.multiscale:
-            if self._ndisplay == 3:
-                # If 3d redering just show lowest level of multiscale
-                warnings.warn(
-                    trans._(
-                        'Multiscale rendering is only supported in 2D. In 3D, only the lowest resolution scale is displayed',
-                        deferred=True,
-                    ),
-                    category=UserWarning,
-                )
-                self.data_level = len(self.data) - 1
-
-            # Slice currently viewed level
-            level = self.data_level
-            indices = self._get_downsampled_indices(
-                self._slice_indices, not_disp, level
-            )
-
-            scale = np.ones(self.ndim)
-            for d in self._dims_displayed:
-                scale[d] = self.downsample_factors[self.data_level][d]
-            self._transforms['tile2data'].scale = scale
-
-            if self._ndisplay == 2:
-                for d in self._displayed_axes:
-                    indices[d] = slice(
-                        self.corner_pixels[0, d],
-                        self.corner_pixels[1, d],
-                        1,
-                    )
-                self._transforms['tile2data'].translate = (
-                    self.corner_pixels[0] * self._transforms['tile2data'].scale
-                )
-            image = self.data[level][tuple(indices)]
-            image_indices = indices
-
-            # Slice thumbnail
-            indices = self._get_downsampled_indices(
-                self._slice_indices, not_disp, self._thumbnail_level
-            )
-            thumbnail_source = self.data[self._thumbnail_level][tuple(indices)]
-        else:
-            self._transforms['tile2data'].scale = np.ones(self.ndim)
-            image_indices = self._slice_indices
-            image = self.data[image_indices]
-
-            # For single-scale we don't request a separate thumbnail_source
-            # from the ChunkLoader because in ImageSlice.chunk_loaded we
-            # call request.thumbnail_source() and it knows to just use the
-            # image itself is there is no explicit thumbnail_source.
-            thumbnail_source = None
-
-        # Load our images, might be sync or async.
-        data = self._SliceDataClass(
-            self, image_indices, image, thumbnail_source
-        )
-        self._load_slice(data)
-        if self._keep_auto_contrast or self._should_calc_clims:
-            self.reset_contrast_limits()
-            self._should_calc_clims = False
-
-    @property
-    def _SliceDataClass(self):
-        # Use special ChunkedSlideData for async.
-        if config.async_loading:
-            from .experimental._chunked_slice_data import ChunkedSliceData
-
-            return ChunkedSliceData
-        return ImageSliceData
-
-    def _load_slice(self, data: ImageSliceData):
-        """Load the image and maybe thumbnail source.
-
-        Parameters
-        ----------
-        data : Slice
-        """
-        if self._slice.load(data):
-            # The load was synchronous.
-            self._on_data_loaded(data, sync=True)
-        else:
-            # The load will be asynchronous. Signal that our self.loaded
-            # property is now false, since the load is in progress.
-            self.events.loaded()
-
-    def _on_data_loaded(self, data: ImageSliceData, sync: bool) -> None:
-        """The given data a was loaded, use it now.
-
-        This routine is called synchronously from _load_async() above, or
-        it is called asynchronously sometime later when the ChunkLoader
-        finishes loading the data in a worker thread or process.
-
-        Parameters
-        ----------
-        data : ChunkRequest
-            The request that was satisfied/loaded.
-        sync : bool
-            If True the chunk was loaded synchronously.
-        """
-        # Transpose after the load.
-        data.transpose(self._get_order())
-
-        # Pass the loaded data to the slice.
-        if not self._slice.on_loaded(data):
-            # Slice rejected it, was it for the wrong indices?
-            return
-
-        # Notify the world.
-        if self.multiscale:
-            self.events.scale()
-            self.events.translate()
-
-        # Announcing we are in the loaded state will make our node visible
-        # if it was invisible during the load.
-        self.events.loaded()
-
-        if not sync:
-            # TODO_ASYNC: Avoid calling self.refresh(), because it would
-            # call our _set_view_slice(). Do we need a "refresh without
-            # set_view_slice()" method that we can call?
-
-            self.events.set_data(value=self._slice)  # update vispy
-            self._update_thumbnail()
-
     def _update_thumbnail(self):
         """Update thumbnail with current image data and colormap."""
-        if not self.loaded:
-            # ASYNC_TODO: Do not compute the thumbnail until we are loaded.
-            # Is there a nicer way to prevent this from getting called?
-            return
-
-        image = self._slice.thumbnail.view
-
-        if self._ndisplay == 3 and self.ndim > 2:
-            image = np.max(image, axis=0)
-
-        # float16 not supported by ndi.zoom
-        dtype = np.dtype(image.dtype)
-        if dtype in [np.dtype(np.float16)]:
-            image = image.astype(np.float32)
-
-        raw_zoom_factor = np.divide(
-            self._thumbnail_shape[:2], image.shape[:2]
-        ).min()
-        new_shape = np.clip(
-            raw_zoom_factor * np.array(image.shape[:2]),
-            1,  # smallest side should be 1 pixel wide
-            self._thumbnail_shape[:2],
-        )
-        zoom_factor = tuple(new_shape / image.shape[:2])
-        if self.rgb:
-            # warning filter can be removed with scipy 1.4
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                downsampled = ndi.zoom(
-                    image, zoom_factor + (1,), prefilter=False, order=0
-                )
-            if image.shape[2] == 4:  # image is RGBA
-                colormapped = np.copy(downsampled)
-                colormapped[..., 3] = downsampled[..., 3] * self.opacity
-                if downsampled.dtype == np.uint8:
-                    colormapped = colormapped.astype(np.uint8)
-            else:  # image is RGB
-                if downsampled.dtype == np.uint8:
-                    alpha = np.full(
-                        downsampled.shape[:2] + (1,),
-                        int(255 * self.opacity),
-                        dtype=np.uint8,
-                    )
-                else:
-                    alpha = np.full(downsampled.shape[:2] + (1,), self.opacity)
-                colormapped = np.concatenate([downsampled, alpha], axis=2)
-        else:
-            # warning filter can be removed with scipy 1.4
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                downsampled = ndi.zoom(
-                    image, zoom_factor, prefilter=False, order=0
-                )
-            low, high = self.contrast_limits
-            downsampled = np.clip(downsampled, low, high)
-            color_range = high - low
-            if color_range != 0:
-                downsampled = (downsampled - low) / color_range
-            downsampled = downsampled**self.gamma
-            color_array = self.colormap.map(downsampled.ravel())
-            colormapped = color_array.reshape(downsampled.shape + (4,))
-            colormapped[..., 3] *= self.opacity
-        self.thumbnail = colormapped
+        # TODO: return thumbnail when slicing instead of updating in-place.
+        pass
 
     def _get_value(self, position):
         """Value of the data at a position in data coordinates.
@@ -980,48 +747,8 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         value : tuple
             Value of the data.
         """
-        if self.multiscale:
-            # for multiscale data map the coordinate from the data back to
-            # the tile
-            # TODO: if async slicing no longer mutates/relies on tile2data
-            # then how does this work? Should _get_value be a variant of
-            # _get_slice.
-            coord = self._transforms['tile2data'].inverse(position)
-        else:
-            coord = position
-
-        coord = np.round(coord).astype(int)
-
-        raw = self._slice.image.raw
-        if self.rgb:
-            shape = raw.shape[:-1]
-        else:
-            shape = raw.shape
-
-        if all(0 <= c < s for c, s in zip(coord[self._dims_displayed], shape)):
-            value = raw[tuple(coord[self._dims_displayed])]
-        else:
-            value = None
-
-        if self.multiscale:
-            value = (self.data_level, value)
-
-        return value
-
-    # For async we add an on_chunk_loaded() method.
-    if config.async_loading:
-
-        def on_chunk_loaded(self, request: ChunkRequest) -> None:
-            """An asynchronous ChunkRequest was loaded.
-
-            Parameters
-            ----------
-            request : ChunkRequest
-                This request was loaded.
-            """
-            # Convert the ChunkRequest to SliceData and use it.
-            data = self._SliceDataClass.from_request(self, request)
-            self._on_data_loaded(data, sync=False)
+        # TODO: this depends on the sliced state, so do nothing for now.
+        return None
 
 
 class Image(_ImageBase):

@@ -1676,23 +1676,6 @@ class Points(Layer):
             request=request, data=data, transform=transform
         )
 
-    def _set_view_slice(self):
-        """Sets the view given the indices to slice with."""
-        # get the indices of points in view
-        indices, scale = self._slice_data(self._slice_indices)
-        self._view_size_scale = scale
-        self._indices_view = np.array(indices, dtype=int)
-        # get the selected points that are in view
-        self._selected_view = list(
-            np.intersect1d(
-                np.array(list(self._selected_data)),
-                self._indices_view,
-                return_indices=True,
-            )[2]
-        )
-        with self.events.highlight.blocker():
-            self._set_highlight(force=True)
-
     def _set_highlight(self, force=False):
         """Render highlights of shapes including boundaries, vertices,
         interaction boxes, and the drag selection box when appropriate.
