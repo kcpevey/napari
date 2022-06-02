@@ -379,7 +379,8 @@ class QtViewer(QSplitter):
     ) -> ViewerSliceResponse:
         LOGGER.debug('QtViewer._slice_layers : %s', requests)
         return tuple(
-            (layer, layer._get_slice(requests[layer])) for layer in requests
+            (layer, layer._get_slice(request))
+            for layer, request in requests.items()
         )
 
     def _on_slices_ready(self, task: Future[ViewerSliceResponse]) -> None:
@@ -396,8 +397,10 @@ class QtViewer(QSplitter):
             'QtViewer._handle_slice_response: %s', response[0][1].request
         )
         for layer, layer_slice in response:
-            vispy_layer = self.layer_to_visual[layer]
-            vispy_layer._set_slice(layer_slice)
+            # TODO: may need to make this update on the main thread.
+            layer.thumbnail = layer_slice.thumbnail
+            if vispy_layer := self.layer_to_visual.get(layer, None):
+                vispy_layer._set_slice(layer_slice)
 
     def _ensure_connect(self):
         # lazy load console

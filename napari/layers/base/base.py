@@ -85,6 +85,7 @@ class LayerSliceRequest(BaseModel):
 class LayerSliceResponse(BaseModel):
     request: LayerSliceRequest
     data: Any
+    thumbnail: Any
     transform: Any
 
 
