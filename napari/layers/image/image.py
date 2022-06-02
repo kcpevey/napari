@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import types
 import warnings
+from math import ceil
 from typing import Sequence, Tuple, Union
 
 import numpy as np
@@ -621,7 +622,7 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         data, tile_to_data = (
             self._get_slice_data_multi_scale(slice_indices, request)
             if self.multiscale
-            else self._get_slice_data(slice_indices)
+            else self._get_slice_data(slice_indices, request)
         )
 
         full_transform = self._transforms.simplified
@@ -665,8 +666,29 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         transform_matrix = transform.affine_matrix @ affine_offset
         return Affine(affine_matrix=transform_matrix)
 
-    def _get_slice_data(self, slice_indices) -> Tuple[np.ndarray, None]:
-        return np.asarray(self.data[slice_indices]), None
+    def _get_slice_data(
+        self, slice_indices, request
+    ) -> Tuple[np.ndarray, None]:
+        if all(t == 1 for t in request.thickness_not_displayed):
+            return np.asarray(self.data[slice_indices]), None
+
+        image_slices = tuple(
+            generate_thick_slices(
+                slice_indices,
+                request.thickness_not_displayed,
+                self.data.shape,
+                request.dims_not_displayed,
+            )
+        )
+
+        return (
+            project_slice(
+                self.data,
+                image_slices,
+                axis=request.dims_not_displayed,
+            ),
+            None,
+        )
 
     def _get_slice_data_multi_scale(
         self, slice_indices, request: LayerSliceRequest
@@ -897,3 +919,24 @@ class _weakref_hide:
 
     def _raw_to_displayed(self, *args, **kwarg):
         return self.obj()._raw_to_displayed(*args, **kwarg)
+
+
+def generate_thick_slices(
+    slice_indices, slice_thicknesses, data_shape, dims_not_displayed
+):
+    for i in range(len(data_shape)):
+        if i in dims_not_displayed:
+            half_thick = max(ceil(slice_thicknesses[i]), 1) / 2
+            idx = slice_indices[i]
+            # round up always with ceil, this way the extremes become:
+            # - slice(i, i+1) for min thickness
+            # - slice(0, shape+1) for max thickness
+            sl_start = max(0, ceil(idx - half_thick))
+            sl_end = min(ceil(idx + half_thick), data_shape[i])
+            yield slice(sl_start, sl_end)
+        else:
+            yield slice_indices[i]
+
+
+def project_slice(data, slices, axis):
+    return np.mean(data[slices], tuple(axis))

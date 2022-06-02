@@ -80,6 +80,7 @@ class LayerSliceRequest(BaseModel):
     point: Tuple[float, ...]
     dims_displayed: Tuple[int, ...]
     dims_not_displayed: Tuple[int, ...]
+    thickness_not_displayed: Tuple[int, ...]
 
 
 class LayerSliceResponse(BaseModel):
@@ -265,6 +266,9 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
         self.scale_factor = 1
         self.multiscale = multiscale
         self._experimental_clipping_planes = ClippingPlaneList()
+
+        # TODO: temporary state to play around with thick slices.
+        self.thickness = 1
 
         self._ndim = ndim
         self._ndisplay = 2
@@ -755,6 +759,9 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
             point=dims.point[offset:],
             dims_displayed=order[-dims.ndisplay :],
             dims_not_displayed=order[: -dims.ndisplay],
+            # Just a temporary hack to play around with supporting thick slices.
+            thickness_not_displayed=(self.thickness,)
+            * (dims.ndim - dims.ndisplay),
         )
 
     def _get_slice_indices(self, request: LayerSliceRequest) -> tuple:
