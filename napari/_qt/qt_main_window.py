@@ -366,7 +366,7 @@ class _QtMainWindow(QMainWindow):
         # executor is shutdown in quit_app() just below.
         # TODO: understand why lots of get slice events are called when quitting.
         # Are layers being removed?
-        self._qt_viewer.slice_executor.shutdown()
+        self._qt_viewer.slice_executor.shutdown(wait=True, cancel_futures=True)
 
         if self._quit_app:
             quit_app()
