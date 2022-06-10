@@ -7,13 +7,11 @@ from abc import ABC, abstractmethod
 from collections import defaultdict, namedtuple
 from contextlib import contextmanager
 from functools import cached_property
-from typing import Any, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, List, Optional, Tuple, Union
 
 import magicgui as mgui
 import numpy as np
 from pydantic import BaseModel
-
-from napari.components.dims import Dims
 
 from ...utils._dask_utils import configure_dask
 from ...utils._magicgui import add_layer_to_viewer, get_layers
@@ -40,6 +38,9 @@ from ..utils.layer_utils import (
 )
 from ..utils.plane import ClippingPlane, ClippingPlaneList
 from ._base_constants import Blending
+
+if TYPE_CHECKING:
+    from napari.components import Dims
 
 Extent = namedtuple('Extent', 'data world step')
 
