@@ -395,7 +395,10 @@ class QtViewer(QSplitter):
         )
         for layer, layer_slice in response:
             # TODO: may need to make this update on the main thread.
-            layer.thumbnail = layer_slice.thumbnail
+            # Thumbnail is non-None for the image layer as a way to experiment,
+            # so skip it for others at the moment.
+            if layer_slice.thumbnail is not None:
+                layer.thumbnail = layer_slice.thumbnail
             if vispy_layer := self.layer_to_visual.get(layer, None):
                 vispy_layer._set_slice(layer_slice)
 
