@@ -26,6 +26,7 @@ from ..utils.color_transformations import (
     transform_color_cycle,
     transform_color_with_defaults,
 )
+from ..utils.interactivity_utils import nd_line_segment_to_displayed_data_ray
 from ..utils.layer_utils import _FeatureTable
 from ..utils.text_manager import TextManager
 from ._shape_list import ShapeList
@@ -584,8 +585,7 @@ class Shapes(Layer):
 
         self._text = TextManager._from_layer(
             text=text,
-            n_text=self.nshapes,
-            properties=self.properties,
+            features=self.features,
         )
 
         # Trigger generation of view slice and thumbnail
@@ -685,7 +685,7 @@ class Shapes(Layer):
                 )
             )
 
-        self._data_view = ShapeList()
+        self._data_view = ShapeList(ndisplay=self._ndisplay)
         self.add(
             data,
             shape_type=shape_type,
@@ -752,8 +752,8 @@ class Shapes(Layer):
                 RuntimeWarning,
             )
 
-        if self.text.values is not None:
-            self.refresh_text()
+        self.text.refresh(self.features)
+
         self.events.properties()
         self.events.features()
 
@@ -1280,7 +1280,6 @@ class Shapes(Layer):
             the color cycle map or colormap), set update_color_mapping=False.
             Default value is False.
         """
-
         self._refresh_color('face', update_color_mapping)
         self._refresh_color('edge', update_color_mapping)
 
@@ -1308,7 +1307,6 @@ class Shapes(Layer):
             if color_mode in [ColorMode.CYCLE, ColorMode.COLORMAP]:
                 colors = self._map_color(attribute, update_color_mapping)
                 setattr(self._data_view, f'{attribute}_color', colors)
-
                 color_event = getattr(self.events, f'{attribute}_color')
                 color_event()
 
@@ -1560,6 +1558,9 @@ class Shapes(Layer):
         text : (N x 1) np.ndarray
             Array of text strings for the N text elements in view
         """
+        # This may be triggered when the string encoding instance changed,
+        # in which case it has no cached values, so generate them here.
+        self.text.string._apply(self.features)
         return self.text.view_text(self._indices_view)
 
     @property
@@ -1575,6 +1576,13 @@ class Shapes(Layer):
         anchor_y : str
             The vispy text anchor for the y axis
         """
+
+        # short circuit if no text present
+        if self.text.values.shape == ():
+            return self.text.compute_text_coords(
+                np.zeros((0, self._ndisplay)), self._ndisplay
+            )
+
         # get the coordinates of the vertices for the shapes in view
         in_view_shapes_coords = [
             self._data_view.data[i] for i in self._indices_view
@@ -1589,6 +1597,12 @@ class Shapes(Layer):
         return self.text.compute_text_coords(
             sliced_in_view_coords, self._ndisplay
         )
+
+    @property
+    def _view_text_color(self) -> np.ndarray:
+        """Get the colors of the text elements at the given indices."""
+        self.text.color._apply(self.features)
+        return self.text._view_color(self._indices_view)
 
     @property
     def mode(self):
@@ -2010,23 +2024,9 @@ class Shapes(Layer):
             z_index = z_index or 0
 
         if n_new_shapes > 0:
-            if len(self.properties) > 0:
-                first_prop_key = next(iter(self.properties))
-                n_prop_values = len(self.properties[first_prop_key])
-            else:
-                n_prop_values = 0
             total_shapes = n_new_shapes + self.nshapes
             self._feature_table.resize(total_shapes)
-            if total_shapes > n_prop_values:
-                n_props_to_add = total_shapes - n_prop_values
-                self.text.add(self.current_properties, n_props_to_add)
-            if total_shapes < n_prop_values:
-                n_props_to_remove = n_prop_values - total_shapes
-                indices_to_remove = np.arange(n_prop_values)[
-                    -n_props_to_remove:
-                ]
-                self.text.remove(indices_to_remove)
-
+            self.text.apply(self.features)
             self._add_shapes(
                 data,
                 shape_type=shape_type,
@@ -2242,19 +2242,35 @@ class Shapes(Layer):
 
     def _add_shapes_to_view(self, shape_inputs, data_view):
         """Build new shapes and add them to the _data_view"""
-        for d, st, ew, ec, fc, z in shape_inputs:
 
-            shape_cls = shape_classes[ShapeType(st)]
-            shape = shape_cls(
-                d,
-                edge_width=ew,
-                z_index=z,
-                dims_order=self._dims_order,
-                ndisplay=self._ndisplay,
+        shape_inputs = tuple(shape_inputs)
+
+        # build all shapes
+        sh_inp = tuple(
+            (
+                shape_classes[ShapeType(st)](
+                    d,
+                    edge_width=ew,
+                    z_index=z,
+                    dims_order=self._dims_order,
+                    ndisplay=self._ndisplay,
+                ),
+                ec,
+                fc,
             )
+            for d, st, ew, ec, fc, z in shape_inputs
+        )
 
-            # Add shape
-            data_view.add(shape, edge_color=ec, face_color=fc, z_refresh=False)
+        shapes, edge_colors, face_colors = tuple(zip(*sh_inp))
+
+        # Add all shapes at once (faster than adding them one by one)
+        data_view.add(
+            shape=shapes,
+            edge_color=edge_colors,
+            face_color=face_colors,
+            z_refresh=False,
+        )
+
         data_view._update_z_order()
 
     @property
@@ -2266,8 +2282,7 @@ class Shapes(Layer):
     def text(self, text):
         self._text._update_from_layer(
             text=text,
-            n_text=self.nshapes,
-            properties=self.properties,
+            features=self.features,
         )
 
     def refresh_text(self):
@@ -2275,7 +2290,7 @@ class Shapes(Layer):
 
         This is generally used if the properties were updated without changing the data
         """
-        self.text.refresh_text(self.properties)
+        self.text.refresh(self.features)
 
     def _set_view_slice(self):
         """Set the view given the slicing indices."""
@@ -2753,7 +2768,7 @@ class Shapes(Layer):
         start_point: np.ndarray,
         end_point: np.ndarray,
         dims_displayed: List[int],
-    ) -> Tuple[Union[float, int], None]:
+    ) -> Tuple[Union[None, float, int], Union[None, np.ndarray]]:
         """Get the shape index and intersection point of the first shape
         (i.e., closest to start_point) along the specified 3D line segment.
 
@@ -2773,41 +2788,34 @@ class Shapes(Layer):
 
         Returns
         -------
-        value
+        value Union[None, float, int]
             The data value along the supplied ray.
-        intersection_point : np.ndarray
+        intersection_point : Union[None, np.ndarray]
             (n,) array containing the point where the ray intersects the first shape
             (i.e., the shape most in the foreground). The coordinate is in layer
             coordinates.
         """
-        if len(dims_displayed) == 3:
-            if (start_point is not None) and (end_point is not None):
-                # Get the normal vector of the click plane
-                start_position_view = start_point[dims_displayed]
-                end_position_view = end_point[dims_displayed]
-                ray_direction = end_position_view - start_position_view
-                ray_direction_normed = ray_direction / np.linalg.norm(
-                    ray_direction
-                )
-                # step the start position back a little bit to be able to detect shapes
-                # that contain the start_position
-                start_position_view = (
-                    start_position_view - 0.1 * ray_direction_normed
-                )
-                value, intersection = self._data_view._inside_3d(
-                    start_position_view, ray_direction_normed
-                )
+        if len(dims_displayed) != 3:
+            # return None if in 2D mode
+            return None, None
+        if (start_point is None) or (end_point is None):
+            # return None if the ray doesn't intersect the data bounding box
+            return None, None
 
-                # add the full nD coords to intersection
-                intersection_point = start_point.copy()
-                intersection_point[dims_displayed] = intersection
+        # Get the normal vector of the click plane
+        start_position, ray_direction = nd_line_segment_to_displayed_data_ray(
+            start_point=start_point,
+            end_point=end_point,
+            dims_displayed=dims_displayed,
+        )
+        value, intersection = self._data_view._inside_3d(
+            start_position, ray_direction
+        )
 
-            else:
-                value = None
-                intersection_point = None
-        else:
-            value = None
-            intersection_point = None
+        # add the full nD coords to intersection
+        intersection_point = start_point.copy()
+        intersection_point[dims_displayed] = intersection
+
         return value, intersection_point
 
     def get_index_and_intersection(
@@ -2886,11 +2894,8 @@ class Shapes(Layer):
                 'face_color': deepcopy(self._data_view._face_color[index]),
                 'features': deepcopy(self.features.iloc[index]),
                 'indices': self._slice_indices,
+                'text': self.text._copy(index),
             }
-            if len(self.text.values) == 0:
-                self._clipboard['text'] = np.empty(0)
-            else:
-                self._clipboard['text'] = deepcopy(self.text.values[index])
         else:
             self._clipboard = {}
 
@@ -2905,6 +2910,7 @@ class Shapes(Layer):
             ]
 
             self._feature_table.append(self._clipboard['features'])
+            self.text._paste(**self._clipboard['text'])
 
             # Add new shape data
             for i, s in enumerate(self._clipboard['data']):
@@ -2918,11 +2924,6 @@ class Shapes(Layer):
                 edge_color = self._clipboard['edge_color'][i]
                 self._data_view.add(
                     shape, face_color=face_color, edge_color=edge_color
-                )
-
-            if len(self._clipboard['text']) > 0:
-                self.text.values = np.concatenate(
-                    (self.text.values, self._clipboard['text']), axis=0
                 )
 
             self.selected_data = set(

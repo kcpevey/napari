@@ -4,6 +4,7 @@ from itertools import cycle, islice
 import numpy as np
 import pandas as pd
 import pytest
+from pydantic import ValidationError
 from vispy.color import get_colormap
 
 from napari._tests.utils import (
@@ -13,6 +14,7 @@ from napari._tests.utils import (
 from napari.layers import Points
 from napari.layers.points._points_utils import points_to_squares
 from napari.layers.utils._text_constants import Anchor
+from napari.layers.utils.color_encoding import ConstantColorEncoding
 from napari.layers.utils.color_manager import ColorProperties
 from napari.utils.colormaps.standardize_color import transform_color
 from napari.utils.transforms import CompositeAffine
@@ -161,18 +163,18 @@ def test_set_current_properties_on_empty_layer_with_color_cycle(feature_name):
 def test_empty_layer_with_text_properties():
     """Test initializing an empty layer with text defined"""
     default_properties = {'point_type': np.array([1.5], dtype=float)}
-    text_kwargs = {'text': 'point_type', 'color': 'red'}
+    text_kwargs = {'string': 'point_type', 'color': 'red'}
     layer = Points(
         property_choices=default_properties,
         text=text_kwargs,
     )
     assert layer.text.values.size == 0
-    np.testing.assert_allclose(layer.text.color, [1, 0, 0, 1])
+    np.testing.assert_allclose(layer.text.color.constant, [1, 0, 0, 1])
 
     # add a point and check that the appropriate text value was added
     layer.add([1, 1])
     np.testing.assert_equal(layer.text.values, ['1.5'])
-    np.testing.assert_allclose(layer.text.color, [1, 0, 0, 1])
+    np.testing.assert_allclose(layer.text.color.constant, [1, 0, 0, 1])
 
 
 def test_empty_layer_with_text_formatted():
@@ -807,8 +809,8 @@ def test_text_from_property_fstring(properties):
 @pytest.mark.parametrize("properties", [properties_array, properties_list])
 def test_set_text_with_kwarg_dict(properties):
     text_kwargs = {
-        'text': 'type: {point_type}',
-        'color': [0, 0, 0, 1],
+        'string': 'type: {point_type}',
+        'color': ConstantColorEncoding(constant=[0, 0, 0, 1]),
         'rotation': 10,
         'translation': [5, 5],
         'anchor': Anchor.UPPER_LEFT,
@@ -824,7 +826,7 @@ def test_set_text_with_kwarg_dict(properties):
     np.testing.assert_equal(layer.text.values, expected_text)
 
     for property, value in text_kwargs.items():
-        if property == 'text':
+        if property == 'string':
             continue
         layer_value = getattr(layer._text, property)
         np.testing.assert_equal(layer_value, value)
@@ -837,7 +839,7 @@ def test_text_error(properties):
     np.random.seed(0)
     data = 20 * np.random.random(shape)
     # try adding text as the wrong type
-    with pytest.raises(TypeError):
+    with pytest.raises(ValidationError):
         Points(data, properties=copy(properties), text=123)
 
 
@@ -2234,7 +2236,7 @@ def test_set_properties_with_invalid_shape_errors_safely():
     np.testing.assert_array_equal(points.text.values, ['A', 'B', 'C'])
 
 
-def test_set_properties_with_missing_text_property_text_becomes_constant():
+def test_set_properties_with_missing_text_property_text_becomes_constant_empty_and_warns():
     properties = {
         'class': np.array(['A', 'B', 'C']),
     }
@@ -2242,11 +2244,11 @@ def test_set_properties_with_missing_text_property_text_becomes_constant():
     np.testing.assert_equal(points.properties, properties)
     np.testing.assert_array_equal(points.text.values, ['A', 'B', 'C'])
 
-    points.properties = {'not_class': np.array(['D', 'E', 'F'])}
+    with pytest.warns(RuntimeWarning):
+        points.properties = {'not_class': np.array(['D', 'E', 'F'])}
 
-    np.testing.assert_array_equal(
-        points.text.values, ['class', 'class', 'class']
-    )
+    values = points.text.values
+    np.testing.assert_array_equal(values, ['', '', ''])
 
 
 def test_text_param_and_setter_are_consistent():
@@ -2255,7 +2257,7 @@ def test_text_param_and_setter_are_consistent():
     properties = {
         'accepted': np.random.choice([True, False], (5,)),
     }
-    text = {'text': 'accepted', 'color': 'black'}
+    text = {'string': 'accepted', 'color': 'black'}
 
     points_init = Points(data, properties=properties, text=text)
 
@@ -2326,3 +2328,86 @@ def test_shown():
     assert np.all(layer.shown[:-2] == True)  # noqa
     assert layer.shown[-2] == False  # noqa
     assert layer.shown[-1] == True  # noqa
+
+
+def test_selected_data_with_non_uniform_sizes():
+    data = np.zeros((3, 2))
+    size = [[1, 3], [1, 4], [1, 3]]
+    layer = Points(data, size=size)
+    # Current size is the default 10 because passed size is not a scalar.
+    assert layer.current_size == 10
+
+    # The first two points have different mean sizes, so the current size
+    # should not change.
+    layer.selected_data = (0, 1)
+    assert layer.current_size == 10
+
+    # The first and last point have the same mean size, so the current size
+    # should change to that mean.
+    layer.selected_data = (0, 2)
+    assert layer.current_size == 2
+
+
+def test_shown_view_size_and_view_data_have_the_same_dimension():
+    data = [[0, 0, 0], [1, 1, 1]]
+    # Data with default settings
+    layer = Points(
+        data, out_of_slice_display=False, shown=[True, True], size=3
+    )
+    assert layer._view_size.shape[0] == layer._view_data.shape[0]
+    assert layer._view_size.shape[0] == 1
+    assert np.array_equal(layer._view_size, [3])
+
+    # shown == [True, False]
+    layer = Points(
+        data, out_of_slice_display=False, shown=[True, False], size=3
+    )
+    assert layer._view_size.shape[0] == layer._view_data.shape[0]
+    assert layer._view_size.shape[0] == 1
+    assert np.array_equal(layer._view_size, [3])
+
+    # shown == [False, True]
+    layer = Points(
+        data, out_of_slice_display=False, shown=[False, True], size=3
+    )
+    assert layer._view_size.shape[0] == layer._view_data.shape[0]
+    assert layer._view_size.shape[0] == 0
+    assert np.array_equal(layer._view_size, [])
+
+    # shown == [False, False]
+    layer = Points(
+        data, out_of_slice_display=False, shown=[False, False], size=3
+    )
+    assert layer._view_size.shape[0] == layer._view_data.shape[0]
+    assert layer._view_size.shape[0] == 0
+    assert np.array_equal(layer._view_size, [])
+
+    # Out of slice display == True
+    layer = Points(data, out_of_slice_display=True, shown=[True, True], size=3)
+    assert layer._view_size.shape[0] == layer._view_data.shape[0]
+    assert layer._view_size.shape[0] == 2
+    assert np.array_equal(layer._view_size, [3, 1])
+
+    # Out of slice display == True && shown == [True, False]
+    layer = Points(
+        data, out_of_slice_display=True, shown=[True, False], size=3
+    )
+    assert layer._view_size.shape[0] == layer._view_data.shape[0]
+    assert layer._view_size.shape[0] == 1
+    assert np.array_equal(layer._view_size, [3])
+
+    # Out of slice display == True && shown == [False, True]
+    layer = Points(
+        data, out_of_slice_display=True, shown=[False, True], size=3
+    )
+    assert layer._view_size.shape[0] == layer._view_data.shape[0]
+    assert layer._view_size.shape[0] == 1
+    assert np.array_equal(layer._view_size, [1])
+
+    # Out of slice display == True && shown == [False, False]
+    layer = Points(
+        data, out_of_slice_display=True, shown=[False, False], size=3
+    )
+    assert layer._view_size.shape[0] == layer._view_data.shape[0]
+    assert layer._view_size.shape[0] == 0
+    assert np.array_equal(layer._view_size, [])

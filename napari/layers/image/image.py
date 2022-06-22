@@ -6,7 +6,7 @@ import logging
 import types
 import warnings
 from math import ceil
-from typing import Sequence, Tuple, Union
+from typing import List, Sequence, Tuple, Union
 
 import numpy as np
 from scipy import ndimage as ndi
@@ -254,8 +254,15 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
             data = MultiScaleData(data)
 
         # Determine if rgb
-        if rgb is None:
-            rgb = guess_rgb(data.shape)
+        rgb_guess = guess_rgb(data.shape)
+        if rgb and not rgb_guess:
+            raise ValueError(
+                trans._(
+                    "'rgb' was set to True but data does not have suitable dimensions."
+                )
+            )
+        elif rgb is None:
+            rgb = rgb_guess
 
         # Determine dimensionality of the data
         ndim = len(data.shape)
@@ -336,7 +343,12 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         else:
             self.contrast_limits_range = contrast_limits
         self._contrast_limits = tuple(self.contrast_limits_range)
-        self.colormap = colormap
+        # using self.colormap = colormap uses the setter in *derived* classes,
+        # where the intention here is to use the base setter, so we use the
+        # _set_colormap method. This is important for Labels layers, because
+        # we don't want to use get_color before set_view_slice has been
+        # triggered (self._update_dims(), below).
+        self._set_colormap(colormap)
         self.contrast_limits = self._contrast_limits
         self._interpolation = {
             2: Interpolation.NEAREST,
@@ -836,6 +848,16 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         """
         # TODO: this depends on the sliced state, so do nothing for now.
         return None
+
+    def _get_offset_data_position(self, position: List[float]) -> List[float]:
+        """Adjust position for offset between viewer and data coordinates.
+
+        VisPy considers the coordinate system origin to be the canvas corner,
+        while napari considers the origin to be the **center** of the corner
+        pixel. To get the correct value under the mouse cursor, we need to
+        shift the position by 0.5 pixels on each axis.
+        """
+        return [p + 0.5 for p in position]
 
 
 class Image(_ImageBase):
