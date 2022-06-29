@@ -232,17 +232,17 @@ It's important to understand what state is currently used for slicing in napari.
     - `_view_alphas`: `(M,) or float`:
         relative opacity for the M in view vectors
     - `_view_faces`:  `(2M, 3) or (4M, 3) np.ndarray`:
-        indices of the _mesh_vertices that form the faces of the M in view vectors.
+        indices of the `_mesh_vertices` that form the faces of the M in view vectors.
         Shape is (2M, 2) for 2D and (4M, 2) for 3D. 
 		* Subset of `_mesh_triangles`
     - `_view_vertices`: `(4M, 2) or (8M, 2) np.ndarray`:
         the corner points for the M in view faces. Shape is (4M, 2) for 2D and (8M, 2) for 3D.
 		* Subset of `_mesh_vertices`
-	- `out_of_slice_display`: `bool`:
+    - `out_of_slice_display`: `bool`:
         If True, renders vectors not just in central plane but also slightly out of slice
         according to specified point marker size.
 
-	- Note: `_view_faces` and `view_vertices` require:
+	- Note: `_view_faces` and `_view_vertices` require:
 		- `_mesh_vertices` - output from `generate_vector_meshes`, not specific to slice
 		- `_mesh_triangles` - output from `generate_vector_meshes`, not specific to slice
 
