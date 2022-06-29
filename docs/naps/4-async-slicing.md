@@ -3,7 +3,7 @@
 # NAP-4: asynchronous slicing
 
 ```{eval-rst}
-:Author: Andy Sweet <andrewdsweet@gmail.com>, Jun Xi Ni
+:Author: Andy Sweet <andrewdsweet@gmail.com>, Jun Xi Ni, Kim Pevey
 :Created: 2022-06-23
 :Status: Draft
 :Type: Standards Track
