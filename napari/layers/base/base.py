@@ -82,6 +82,7 @@ class LayerSliceRequest(BaseModel):
     dims_displayed: Tuple[int, ...]
     dims_not_displayed: Tuple[int, ...]
     thickness_not_displayed: Tuple[int, ...]
+    out_of_slice_display: bool = False  # unique to vectors and points
 
 
 class LayerSliceResponse(BaseModel):

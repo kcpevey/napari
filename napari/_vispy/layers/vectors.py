@@ -1,7 +1,12 @@
+import logging
+
 import numpy as np
 
 from ..visuals.vectors import VectorsVisual
 from .base import VispyBaseLayer
+from napari.layers.base.base import LayerSliceResponse
+
+LOGGER = logging.getLogger("napari._vispy.layers.vectors")
 
 
 class VispyVectorsLayer(VispyBaseLayer):
@@ -12,9 +17,14 @@ class VispyVectorsLayer(VispyBaseLayer):
         self.layer.events.edge_color.connect(self._on_data_change)
 
         self.reset()
-        self._on_data_change()
+        # self._on_data_change()
+
+    def _set_slice(self, response: LayerSliceResponse) -> None:
+        LOGGER.debug('VispyPointsLayer._set_slice : %s', response.request)
+        #  TODO: What goes here?
 
     def _on_data_change(self):
+        # TODO: This goes away, but I don't know where this code goes to
         if (
             len(self.layer._view_vertices) == 0
             or len(self.layer._view_faces) == 0
