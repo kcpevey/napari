@@ -22,9 +22,12 @@ from napari.layers.base.base import LayerSliceRequest, LayerSliceResponse
 LOGGER = logging.getLogger("napari.layers.vectors")
 
 class VectorSliceData(BaseModel):
+    # input data
     faces: Any
     alphas: Any
     vertices: Any
+    # output data
+    face_color: Any
 
 # class VectorSliceRequest(LayerSliceRequest):
 #     out_of_slide_display: bool
@@ -907,8 +910,37 @@ class Vectors(Layer):
 
         thumbnail = self._make_thumbnail()
 
+        # #############################################
+        # logic from vispy on_data_change:
+        # TODO: why do we need to change vertices and faces
+
+        # if vertices and faces are empty, generate empty arrays
+        # this logic needs to be collapsed with the logic above
+        if (
+            len(self._view_vertices) == 0
+            or len(self._view_faces) == 0
+        ):
+            vertices = np.zeros((3, self._ndisplay))
+            faces = np.array([[0, 1, 2]])
+            face_color = np.array([[0, 0, 0, 0]])
+        else:
+            # reverse the vertices # TODO: why?
+            vertices = self._view_vertices[:, ::-1]
+            # copy over the faces
+            faces = self._view_faces
+            face_color = self._view_face_color # uses view_alphas and view_indices
+
+        # TODO: what is this?
+        if self._ndisplay == 3 and self.ndim == 2:
+            vertices = np.pad(vertices, ((0, 0), (0, 1)), mode='constant')
+
+        # ###################################################
+
         data = VectorSliceData(
-            faces=self._view_faces, alphas=self._view_alphas, vertices=self._view_vertices
+            faces=self._view_faces, 
+            alphas=self._view_alphas, 
+            vertices=self._view_vertices, 
+            face_color=face_color,
         )
 
         return LayerSliceResponse(
