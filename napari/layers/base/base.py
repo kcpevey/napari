@@ -222,9 +222,6 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
         depends on the current zoom level.
     source : Source
         source of the layer (such as a plugin or widget)
-    out_of_slice_display : bool
-        If True, renders vectors not just in central plane but also slightly out of slice
-        according to specified vector length.
 
     Notes
     -----

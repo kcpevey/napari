@@ -29,9 +29,6 @@ class VectorSliceData(BaseModel):
     vertices: Any
     face_color: Any
 
-# class VectorSliceRequest(LayerSliceRequest):
-#     out_of_slide_display: bool
-
 class Vectors(Layer):
     """
     Vectors layer renders lines onto the canvas.
@@ -272,14 +269,6 @@ class Vectors(Layer):
             else self.property_choices,
         )
 
-        # Data containing vectors in the currently viewed slice
-        # self._view_data = np.empty((0, 2, 2))
-        # self._displayed_stored = []
-        # self._view_vertices = []
-        # self._view_faces = []
-        # self._view_indices = []
-        # self._view_alphas = []
-
         # now that everything is set up, make the layer visible (if set to visible)
         self._update_dims()
         self.visible = visible
@@ -443,6 +432,17 @@ class Vectors(Layer):
             mins = np.min(data, axis=(0, 1))
             extrema = np.vstack([mins, maxs])
         return extrema
+
+    @property
+    def out_of_slice_display(self) -> bool:
+        """bool: if true, renders vectors that are slightly out of slice."""
+        return self._out_of_slice_display
+
+    @out_of_slice_display.setter
+    def out_of_slice_display(self, out_of_slice_display: bool) -> None:
+        self._out_of_slice_display = out_of_slice_display
+        self.events.out_of_slice_display()
+        self.refresh()
 
     @property
     def edge_width(self) -> Union[int, float]:
@@ -632,18 +632,6 @@ class Vectors(Layer):
 
         return face_color
 
-    @property
-    def out_of_slice_display(self) -> bool:
-        """bool: if true, renders vectors that are slightly out of slice."""
-        return self._out_of_slice_display
-
-    @out_of_slice_display.setter
-    def out_of_slice_display(self, out_of_slice_display: bool) -> None:
-        self._out_of_slice_display = out_of_slice_display
-        self.events.out_of_slice_display()
-        self.refresh()
-
-
     def _slice_data(
         self, dims_indices, dims_not_displayed, out_of_slice_display
     ) -> Tuple[List[int], Union[float, np.ndarray]]:
@@ -777,8 +765,7 @@ class Vectors(Layer):
         pass
 
     def _make_thumbnail(self, view_data, view_indices):
-        """ THIS IS THE OLD UPDATE_THUMBNAIL METHOD
-        TODO: IS IT OK THAT THE DATA IS ALL COMING FROM SELF???
+        """ THIS IS FROM THE OLD UPDATE_THUMBNAIL METHOD
         Update thumbnail with current vectors and colors."""
         # calculate min vals for the vertices and pad with 0.5
         # the offset is needed to ensure that the top left corner of the
@@ -937,7 +924,7 @@ class Vectors(Layer):
 
         # prep for vispy by translating [z,y,x]->[x,y,z]
         vertices = view_vertices[:, ::-1]
-        
+
         face_color = self._view_face_color(view_indices, view_alphas, request.ndisplay, request.ndim) # uses view_alphas and view_indices
 
         # TODO: what is this?

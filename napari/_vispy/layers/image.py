@@ -87,7 +87,6 @@ class VispyImageLayer(VispyBaseLayer):
         self.reset()
 
     def _set_slice(self, response: LayerSliceResponse) -> None:
-        """Replaced """
         LOGGER.debug('VispyImageLayer._set_slice : %s', response.request)
 
         data = fix_data_dtype(response.data)
