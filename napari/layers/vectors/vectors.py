@@ -19,6 +19,8 @@ from ..utils.layer_utils import _FeatureTable
 from ._vector_utils import fix_data_vectors, generate_vector_meshes
 from napari.layers.base.base import LayerSliceRequest, LayerSliceResponse
 
+from napari.components import Dims
+
 LOGGER = logging.getLogger("napari.layers.vectors")
 
 class VectorSliceData(BaseModel):
@@ -234,6 +236,7 @@ class Vectors(Layer):
             properties=Event,
             features=Event,
             feature_defaults=Event,
+            out_of_slice_display=Event,
         )
 
         # Save the vector style params
@@ -632,6 +635,18 @@ class Vectors(Layer):
 
         return face_color
 
+    @property
+    def out_of_slice_display(self) -> bool:
+        """bool: if true, renders vectors that are slightly out of slice."""
+        return self._out_of_slice_display
+
+    @out_of_slice_display.setter
+    def out_of_slice_display(self, out_of_slice_display: bool) -> None:
+        self._out_of_slice_display = out_of_slice_display
+        self.events.out_of_slice_display()
+        self.refresh()
+
+
     def _slice_data(
         self, dims_indices, dims_not_displayed, out_of_slice_display
     ) -> Tuple[List[int], Union[float, np.ndarray]]:
@@ -826,6 +841,21 @@ class Vectors(Layer):
             Value of the data at the coord.
         """
         return None
+
+    def _make_slice_request(self, dims: Dims) -> LayerSliceRequest:
+        offset = dims.ndim - self.ndim
+        order = [i - offset for i in dims.order if i >= offset]
+        return LayerSliceRequest(
+            ndim=self.ndim,
+            ndisplay=dims.ndisplay,
+            point=dims.point[offset:],
+            dims_displayed=order[-dims.ndisplay :],
+            dims_not_displayed=order[: -dims.ndisplay],
+            # Just a temporary hack to play around with supporting thick slices.
+            thickness_not_displayed=(self.thickness,)
+            * (dims.ndim - dims.ndisplay),
+            out_of_slice_display=self._out_of_slice_display,
+        )
 
     def _get_slice(self, request: LayerSliceRequest) -> LayerSliceResponse:
         """New method"""
