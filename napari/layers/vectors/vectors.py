@@ -844,6 +844,7 @@ class Vectors(Layer):
     def _make_slice_request(self, dims: Dims) -> LayerSliceRequest:
         offset = dims.ndim - self.ndim
         order = [i - offset for i in dims.order if i >= offset]
+        
         return LayerSliceRequest(
             ndim=self.ndim,
             ndisplay=dims.ndisplay,
