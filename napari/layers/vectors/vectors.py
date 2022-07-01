@@ -621,10 +621,9 @@ class Vectors(Layer):
     ):
         self._edge.contrast_limits = contrast_limits
 
-    @property
     def _view_face_color(self, view_indices, view_alphas, ndisplay, ndim) -> np.ndarray:
         """(Mx4) np.ndarray : colors for the M in view vectors"""
-        face_color = self.edge_color[view_indices]
+        face_color = self.edge_color[view_indices]  # TODO: self alert!
         face_color[:, -1] *= view_alphas
         face_color = np.repeat(face_color, 2, axis=0)
 
@@ -844,7 +843,7 @@ class Vectors(Layer):
     def _make_slice_request(self, dims: Dims) -> LayerSliceRequest:
         offset = dims.ndim - self.ndim
         order = [i - offset for i in dims.order if i >= offset]
-        
+
         return LayerSliceRequest(
             ndim=self.ndim,
             ndisplay=dims.ndisplay,
@@ -938,8 +937,7 @@ class Vectors(Layer):
 
         # prep for vispy by translating [z,y,x]->[x,y,z]
         vertices = view_vertices[:, ::-1]
-        # # copy over the faces
-        # faces = view_faces
+        
         face_color = self._view_face_color(view_indices, view_alphas, request.ndisplay, request.ndim) # uses view_alphas and view_indices
 
         # TODO: what is this?
