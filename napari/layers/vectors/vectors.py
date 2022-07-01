@@ -24,11 +24,9 @@ from napari.components import Dims
 LOGGER = logging.getLogger("napari.layers.vectors")
 
 class VectorSliceData(BaseModel):
-    # input data
     faces: Any
     alphas: Any
     vertices: Any
-    # output data
     face_color: Any
 
 # class VectorSliceRequest(LayerSliceRequest):
@@ -722,56 +720,56 @@ class Vectors(Layer):
 
     def _set_view_slice(self):
         """Sets the view given the indices to slice with."""
+        indices, alphas = self._slice_data(self._slice_indices)
+        if not self._dims_displayed == self._displayed_stored:
+            vertices, triangles = generate_vector_meshes(
+                self.data[:, :, list(self._dims_displayed)],
+                self.edge_width,
+                self.length,
+            )
+            self._mesh_vertices = vertices
+            self._mesh_triangles = triangles
+            self._displayed_stored = copy(self._dims_displayed)
+
+        vertices = self._mesh_vertices
+        disp = list(self._dims_displayed)
+
+        if len(self.data) == 0:
+            faces = []
+            self._view_data = np.empty((0, 2, 2))
+            self._view_indices = []
+        elif self.ndim > 2:
+            indices, alphas = self._slice_data(self._slice_indices)
+            self._view_indices = indices
+            self._view_alphas = alphas
+            self._view_data = self.data[np.ix_(indices, [0, 1], disp)]
+            if len(indices) == 0:
+                faces = []
+            else:
+                keep_inds = np.repeat(2 * indices, 2)
+                keep_inds[1::2] = keep_inds[1::2] + 1
+                if self._ndisplay == 3:
+                    keep_inds = np.concatenate(
+                        [
+                            keep_inds,
+                            len(self._mesh_triangles) // 2 + keep_inds,
+                        ],
+                        axis=0,
+                    )
+                faces = self._mesh_triangles[keep_inds]
+        else:
+            faces = self._mesh_triangles
+            self._view_data = self.data[:, :, disp]
+            self._view_indices = np.arange(self.data.shape[0])
+            self._view_alphas = 1.0
+
+        if len(faces) == 0:
+            self._view_vertices = []
+            self._view_faces = []
+        else:
+            self._view_vertices = vertices
+            self._view_faces = faces
         raise NotImplementedError
-        # indices, alphas = self._slice_data(self._slice_indices)
-        # if not self._dims_displayed == self._displayed_stored:
-        #     vertices, triangles = generate_vector_meshes(
-        #         self.data[:, :, list(self._dims_displayed)],
-        #         self.edge_width,
-        #         self.length,
-        #     )
-        #     self._mesh_vertices = vertices
-        #     self._mesh_triangles = triangles
-        #     self._displayed_stored = copy(self._dims_displayed)
-
-        # vertices = self._mesh_vertices
-        # disp = list(self._dims_displayed)
-
-        # if len(self.data) == 0:
-        #     faces = []
-        #     self._view_data = np.empty((0, 2, 2))
-        #     self._view_indices = []
-        # elif self.ndim > 2:
-        #     indices, alphas = self._slice_data(self._slice_indices)
-        #     self._view_indices = indices
-        #     self._view_alphas = alphas
-        #     self._view_data = self.data[np.ix_(indices, [0, 1], disp)]
-        #     if len(indices) == 0:
-        #         faces = []
-        #     else:
-        #         keep_inds = np.repeat(2 * indices, 2)
-        #         keep_inds[1::2] = keep_inds[1::2] + 1
-        #         if self._ndisplay == 3:
-        #             keep_inds = np.concatenate(
-        #                 [
-        #                     keep_inds,
-        #                     len(self._mesh_triangles) // 2 + keep_inds,
-        #                 ],
-        #                 axis=0,
-        #             )
-        #         faces = self._mesh_triangles[keep_inds]
-        # else:
-        #     faces = self._mesh_triangles
-        #     self._view_data = self.data[:, :, disp]
-        #     self._view_indices = np.arange(self.data.shape[0])
-        #     self._view_alphas = 1.0
-
-        # if len(faces) == 0:
-        #     self._view_vertices = []
-        #     self._view_faces = []
-        # else:
-        #     self._view_vertices = vertices
-        #     self._view_faces = faces
 
     def _update_thumbnail(self):
         """ Update thumbnail with current vectors and colors."""
@@ -857,6 +855,25 @@ class Vectors(Layer):
             out_of_slice_display=self._out_of_slice_display,
         )
 
+    def _update_mesh(self):
+        """
+        # TODO: add trigger connection - 
+        #       if dims_displayed changes, trigger remesh.
+        #       Which is actually the same as: if _dims_order or _ndisplay changes, trigger remesh
+
+        # if you change the number of dims displayed, you'll need to 
+        # regenerate meshes
+
+        """
+        vertices, triangles = generate_vector_meshes(
+                self.data[:, :, list(self.dims_displayed)],
+                self.edge_width,
+                self.length,
+        )
+        self._mesh_vertices = vertices
+        self._mesh_triangles = triangles
+        # self._displayed_stored = copy(self.dims_displayed)  # TODO: kcp wants to remove this, it should be handed with this new trigger method
+
     def _get_slice(self, request: LayerSliceRequest) -> LayerSliceResponse:
         """New method"""
         LOGGER.debug('Vectors._get_slice : %s', request)
@@ -873,80 +890,53 @@ class Vectors(Layer):
         slice_indices = self._get_slice_indices(request)
         indices, alphas = self._slice_data(slice_indices, request.dims_not_displayed, request.out_of_slice_display)
 
-        # if you change the number of dims displayed, you'll need to 
-        # regenerate meshes
-        if not request.dims_displayed == self._displayed_stored:
-            vertices, triangles = generate_vector_meshes(
-                self.data[:, :, list(request.dims_displayed)],
-                self.edge_width,
-                self.length,
-            )
-            self._mesh_vertices = vertices
-            self._mesh_triangles = triangles
-            self._displayed_stored = copy(request.dims_displayed)
+        # assume the mesh is up to date at this point -
+        # all mesh generation should be triggered by the new method `_update_mesh`
 
-        vertices = self._mesh_vertices
+        # vertices = self._mesh_vertices
         disp = list(request.dims_displayed)
 
         # if there is no data, set empty
-        if len(self.data) == 0:
-            faces = []
+        if len(self.data) == 0 or len(indices) == 0:
+            self._view_faces =  np.array([[0, 1, 2]])
             self._view_data = np.empty((0, 2, 2))
             self._view_indices = []
-        elif self.ndim > 2:
-            indices, alphas = self._slice_data(slice_indices, request.dims_not_displayed, request.out_of_slice_display)
+            self._view_vertices = np.zeros((3, request._ndisplay))
+        # if more than 2D, reduce the data and mesh dimensions
+        elif request.ndim > 2:
             self._view_indices = indices
             self._view_alphas = alphas
             self._view_data = self.data[np.ix_(indices, [0, 1], disp)]
-            if len(indices) == 0:
-                faces = []
-            else:
-                keep_inds = np.repeat(2 * indices, 2)
-                keep_inds[1::2] = keep_inds[1::2] + 1
-                if self._ndisplay == 3:
-                    keep_inds = np.concatenate(
-                        [
-                            keep_inds,
-                            len(self._mesh_triangles) // 2 + keep_inds,
-                        ],
-                        axis=0,
-                    )
-                faces = self._mesh_triangles[keep_inds]
+            keep_inds = np.repeat(2 * indices, 2)
+            keep_inds[1::2] = keep_inds[1::2] + 1
+            if request._ndisplay == 3:
+                keep_inds = np.concatenate(
+                    [
+                        keep_inds,
+                        len(self._mesh_triangles) // 2 + keep_inds,
+                    ],
+                    axis=0,
+                )
+            self._view_faces = self._mesh_triangles[keep_inds]
+            self._view_vertices = self._mesh_vertices
+
         else:
-            faces = self._mesh_triangles
+            self._view_faces = self._mesh_triangles
+            self._view_vertices = self._mesh_vertices
             self._view_data = self.data[:, :, disp]
             self._view_indices = np.arange(self.data.shape[0])
             self._view_alphas = 1.0
-
-        # if there are no faces, set empty views
-        if len(faces) == 0:
-            self._view_vertices = []
-            self._view_faces = []
-        else:
-            self._view_vertices = vertices
-            self._view_faces = faces
 
         thumbnail = self._make_thumbnail()
 
         # #############################################
         # logic from vispy on_data_change:
-        # TODO: why do we need to change vertices and faces
 
-        # if vertices and faces are empty, generate empty arrays
-        # this logic needs to be collapsed with the logic above
-        if (
-            len(self._view_vertices) == 0
-            or len(self._view_faces) == 0
-        ):
-            vertices = np.zeros((3, self._ndisplay))
-            faces = np.array([[0, 1, 2]])
-            face_color = np.array([[0, 0, 0, 0]])
-        else:
-            # reverse the vertices # TODO: why?
-            vertices = self._view_vertices[:, ::-1]
-            # copy over the faces
-            faces = self._view_faces
-            face_color = self._view_face_color # uses view_alphas and view_indices
+        # prep for vispy by translating [z,y,x]->[x,y,z]
+        vertices = self._view_vertices[:, ::-1]
+        # # copy over the faces
+        # faces = self._view_faces
+        face_color = self._view_face_color # uses view_alphas and view_indices
 
         # TODO: what is this?
         if self._ndisplay == 3 and self.ndim == 2:
@@ -957,7 +947,7 @@ class Vectors(Layer):
         data = VectorSliceData(
             faces=self._view_faces, 
             alphas=self._view_alphas, 
-            vertices=self._view_vertices, 
+            vertices=vertices, 
             face_color=face_color,
         )
 
