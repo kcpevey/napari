@@ -82,7 +82,7 @@ class LayerSliceRequest(BaseModel):
     dims_displayed: Tuple[int, ...]
     dims_not_displayed: Tuple[int, ...]
     thickness_not_displayed: Tuple[int, ...]
-    out_of_slice_display: bool = False  # unique to vectors and points
+    out_of_slice_display: bool  # unique to vectors and points
 
 
 class LayerSliceResponse(BaseModel):
@@ -218,6 +218,9 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
         depends on the current zoom level.
     source : Source
         source of the layer (such as a plugin or widget)
+    out_of_slice_display : bool
+        If True, renders vectors not just in central plane but also slightly out of slice
+        according to specified vector length.
 
     Notes
     -----
@@ -248,6 +251,7 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
         multiscale=False,
         cache=True,  # this should move to future "data source" object.
         experimental_clipping_planes=None,
+        out_of_slice_display=False,
     ):
         super().__init__()
 
@@ -270,6 +274,9 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
         self.scale_factor = 1
         self.multiscale = multiscale
         self._experimental_clipping_planes = ClippingPlaneList()
+
+        # unique to vectors and points
+        self._out_of_slice_display = out_of_slice_display
 
         # TODO: temporary state to play around with thick slices.
         self.thickness = 1
@@ -348,6 +355,7 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
             loaded=Event,
             set_view_slice=Event,
             _ndisplay=Event,
+            out_of_slice_display=Event, # unique to vectors and points
             select=WarningEmitter(
                 trans._(
                     "'layer.events.select' is deprecated and will be removed in napari v0.4.9, use 'viewer.layers.selection.events.changed' instead, and inspect the 'added' attribute on the event.",
@@ -751,6 +759,17 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
             step=abs(data_to_world.scale),
         )
 
+    @property
+    def out_of_slice_display(self) -> bool:
+        """bool: if true, renders vectors that are slightly out of slice."""
+        return self._out_of_slice_display
+
+    @out_of_slice_display.setter
+    def out_of_slice_display(self, out_of_slice_display: bool) -> None:
+        self._out_of_slice_display = out_of_slice_display
+        self.events.out_of_slice_display()
+        self.refresh()
+
     def _make_slice_request(self, dims: Dims) -> LayerSliceRequest:
         offset = dims.ndim - self.ndim
         order = [i - offset for i in dims.order if i >= offset]
@@ -763,6 +782,7 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
             # Just a temporary hack to play around with supporting thick slices.
             thickness_not_displayed=(self.thickness,)
             * (dims.ndim - dims.ndisplay),
+            out_of_slice_display=self._out_of_slice_display,  # unique to points and vectors
         )
 
     def _get_slice_indices(self, request: LayerSliceRequest) -> tuple:

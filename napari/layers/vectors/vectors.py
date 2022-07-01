@@ -73,7 +73,7 @@ class Vectors(Layer):
         (property.min(), property.max())
     out_of_slice_display : bool
         If True, renders vectors not just in central plane but also slightly out of slice
-        according to specified point marker size.
+        according to specified vector length.
     name : str
         Name of the layer.
     metadata : dict
@@ -139,7 +139,7 @@ class Vectors(Layer):
         (property.min(), property.max())
     out_of_slice_display : bool
         If True, renders vectors not just in central plane but also slightly out of slice
-        according to specified point marker size.
+        according to specified vector length.
 
     Notes
     -----
@@ -232,7 +232,6 @@ class Vectors(Layer):
             edge_color=Event,
             edge_color_mode=Event,
             properties=Event,
-            out_of_slice_display=Event,
             features=Event,
             feature_defaults=Event,
         )
@@ -443,17 +442,6 @@ class Vectors(Layer):
             mins = np.min(data, axis=(0, 1))
             extrema = np.vstack([mins, maxs])
         return extrema
-
-    @property
-    def out_of_slice_display(self) -> bool:
-        """bool: if true, renders vectors that are slightly out of slice."""
-        return self._out_of_slice_display
-
-    @out_of_slice_display.setter
-    def out_of_slice_display(self, out_of_slice_display: bool) -> None:
-        self._out_of_slice_display = out_of_slice_display
-        self.events.out_of_slice_display()
-        self.refresh()
 
     @property
     def edge_width(self) -> Union[int, float]:
