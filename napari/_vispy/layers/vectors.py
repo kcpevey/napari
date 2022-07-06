@@ -24,9 +24,9 @@ class VispyVectorsLayer(VispyBaseLayer):
         
         Response data needs face_color
         """
-        LOGGER.debug('VispyPointsLayer._set_slice : %s', response.request)
+        LOGGER.debug('VispyVectorsLayer._set_slice : %s', response.request)
 
-        # this logic need to move to the get_slice layer class
+        # this logic has been moved to the get_slice layer class
         # if (
         #     len(self.layer._view_vertices) == 0
         #     or len(self.layer._view_faces) == 0

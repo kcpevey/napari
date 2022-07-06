@@ -86,6 +86,7 @@ class LayerSliceRequest(BaseModel):
     # unique to vectors
     mesh_vertices: Any
     mesh_triangles: Any
+    edge_color: Any
 
 
 

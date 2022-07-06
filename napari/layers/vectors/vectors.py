@@ -242,13 +242,14 @@ class Vectors(Layer):
 
         self._data = data
 
-        vertices, triangles = generate_vector_meshes(
-            self._data[:, :, list(self._dims_displayed)],
-            self.edge_width,
-            self.length,
-        )
-        self._mesh_vertices = vertices
-        self._mesh_triangles = triangles
+        self._update_mesh()
+        # vertices, triangles = generate_vector_meshes(
+        #     self._data[:, :, list(self._dims_displayed)],
+        #     self.edge_width,
+        #     self.length,
+        # )
+        # self._mesh_vertices = vertices
+        # self._mesh_triangles = triangles
         self._displayed_stored = copy(self._dims_displayed)
 
         self._feature_table = _FeatureTable.from_layer(
@@ -285,13 +286,14 @@ class Vectors(Layer):
         self._data, _ = fix_data_vectors(vectors, self.ndim)
         n_vectors = len(self.data)
 
-        vertices, triangles = generate_vector_meshes(
-            self._data[:, :, list(self._dims_displayed)],
-            self.edge_width,
-            self.length,
-        )
-        self._mesh_vertices = vertices
-        self._mesh_triangles = triangles
+        self._update_mesh()
+        # vertices, triangles = generate_vector_meshes(
+        #     self._data[:, :, list(self._dims_displayed)],
+        #     self.edge_width,
+        #     self.length,
+        # )
+        # self._mesh_vertices = vertices
+        # self._mesh_triangles = triangles
         self._displayed_stored = copy(self._dims_displayed)
 
         # Adjust the props/color arrays when the number of vectors has changed
@@ -453,13 +455,14 @@ class Vectors(Layer):
     def edge_width(self, edge_width: Union[int, float]):
         self._edge_width = edge_width
 
-        vertices, triangles = generate_vector_meshes(
-            self.data[:, :, list(self._dims_displayed)],
-            self._edge_width,
-            self.length,
-        )
-        self._mesh_vertices = vertices
-        self._mesh_triangles = triangles
+        self._update_mesh()
+        # vertices, triangles = generate_vector_meshes(
+        #     self.data[:, :, list(self._dims_displayed)],
+        #     self._edge_width,
+        #     self.length,
+        # )
+        # self._mesh_vertices = vertices
+        # self._mesh_triangles = triangles
         self._displayed_stored = copy(self._dims_displayed)
 
         self.events.edge_width()
@@ -474,13 +477,14 @@ class Vectors(Layer):
     def length(self, length: Union[int, float]):
         self._length = float(length)
 
-        vertices, triangles = generate_vector_meshes(
-            self.data[:, :, list(self._dims_displayed)],
-            self.edge_width,
-            self._length,
-        )
-        self._mesh_vertices = vertices
-        self._mesh_triangles = triangles
+        self._update_mesh()
+        # vertices, triangles = generate_vector_meshes(
+        #     self.data[:, :, list(self._dims_displayed)],
+        #     self.edge_width,
+        #     self._length,
+        # )
+        # self._mesh_vertices = vertices
+        # self._mesh_triangles = triangles
         self._displayed_stored = copy(self._dims_displayed)
 
         self.events.length()
@@ -621,9 +625,9 @@ class Vectors(Layer):
     ):
         self._edge.contrast_limits = contrast_limits
 
-    def _view_face_color(self, view_indices, view_alphas, ndisplay, ndim) -> np.ndarray:
+    def _view_face_color(self, view_indices, view_alphas, ndisplay, ndim, edge_color) -> np.ndarray:
         """(Mx4) np.ndarray : colors for the M in view vectors"""
-        face_color = self.edge_color[view_indices]  # TODO: self alert!
+        face_color = edge_color[view_indices]
         face_color[:, -1] *= view_alphas
         face_color = np.repeat(face_color, 2, axis=0)
 
@@ -831,6 +835,10 @@ class Vectors(Layer):
         offset = dims.ndim - self.ndim
         order = [i - offset for i in dims.order if i >= offset]
 
+        # this is required because this is called twice. The second time needs this update
+        # the second call is from setting ndisplay
+        self._update_mesh()  # sledgehammer to avoid more delicate implementation...
+
         return LayerSliceRequest(
             ndim=self.ndim,
             ndisplay=dims.ndisplay,
@@ -843,6 +851,7 @@ class Vectors(Layer):
             out_of_slice_display=self._out_of_slice_display,
             mesh_vertices=self._mesh_vertices,
             mesh_triangles=self._mesh_triangles,
+            edge_color=self.edge_color,
         )
 
     def _update_mesh(self):
@@ -855,6 +864,7 @@ class Vectors(Layer):
         # regenerate meshes
 
         """
+        LOGGER.debug('Vectors._update_mesh')
         vertices, triangles = generate_vector_meshes(
                 self.data[:, :, list(self._dims_displayed)],
                 self.edge_width,
@@ -883,7 +893,6 @@ class Vectors(Layer):
         # assume the mesh is up to date at this point -
         # all mesh generation should be triggered by the new method `_update_mesh`
 
-        # vertices = self._mesh_vertices
         disp = list(request.dims_displayed)
 
         # if there is no data, set empty
@@ -891,15 +900,18 @@ class Vectors(Layer):
             view_faces =  np.array([[0, 1, 2]])
             view_data = np.empty((0, 2, 2))
             view_indices = []
-            view_vertices = np.zeros((3, request._ndisplay))
+            view_vertices = np.zeros((3, request.ndisplay))
         # if more than 2D, reduce the data and mesh dimensions
         elif request.ndim > 2:
+            # TODO: is this line necessary?
+            indices, alphas = self._slice_data(slice_indices, request.dims_not_displayed, request.out_of_slice_display)
+
             view_indices = indices
             view_alphas = alphas
             view_data = self.data[np.ix_(indices, [0, 1], disp)]
             keep_inds = np.repeat(2 * indices, 2)
             keep_inds[1::2] = keep_inds[1::2] + 1
-            if request._ndisplay == 3:
+            if request.ndisplay == 3:
                 keep_inds = np.concatenate(
                     [
                         keep_inds,
@@ -909,7 +921,6 @@ class Vectors(Layer):
                 )
             view_faces = request.mesh_triangles[keep_inds]
             view_vertices = request.mesh_vertices
-
         else:
             view_faces = request.mesh_triangles
             view_vertices = request.mesh_vertices
@@ -925,7 +936,7 @@ class Vectors(Layer):
         # prep for vispy by translating [z,y,x]->[x,y,z]
         vertices = view_vertices[:, ::-1]
 
-        face_color = self._view_face_color(view_indices, view_alphas, request.ndisplay, request.ndim) # uses view_alphas and view_indices
+        face_color = self._view_face_color(view_indices, view_alphas, request.ndisplay, request.ndim, request.edge_color) # uses view_alphas and view_indices
 
         # TODO: what is this?
         if self._ndisplay == 3 and self.ndim == 2:
