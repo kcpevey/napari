@@ -243,13 +243,6 @@ class Vectors(Layer):
         self._data = data
 
         self._update_mesh()
-        # vertices, triangles = generate_vector_meshes(
-        #     self._data[:, :, list(self._dims_displayed)],
-        #     self.edge_width,
-        #     self.length,
-        # )
-        # self._mesh_vertices = vertices
-        # self._mesh_triangles = triangles
         self._displayed_stored = copy(self._dims_displayed)
 
         self._feature_table = _FeatureTable.from_layer(
@@ -287,13 +280,6 @@ class Vectors(Layer):
         n_vectors = len(self.data)
 
         self._update_mesh()
-        # vertices, triangles = generate_vector_meshes(
-        #     self._data[:, :, list(self._dims_displayed)],
-        #     self.edge_width,
-        #     self.length,
-        # )
-        # self._mesh_vertices = vertices
-        # self._mesh_triangles = triangles
         self._displayed_stored = copy(self._dims_displayed)
 
         # Adjust the props/color arrays when the number of vectors has changed
@@ -456,13 +442,6 @@ class Vectors(Layer):
         self._edge_width = edge_width
 
         self._update_mesh()
-        # vertices, triangles = generate_vector_meshes(
-        #     self.data[:, :, list(self._dims_displayed)],
-        #     self._edge_width,
-        #     self.length,
-        # )
-        # self._mesh_vertices = vertices
-        # self._mesh_triangles = triangles
         self._displayed_stored = copy(self._dims_displayed)
 
         self.events.edge_width()
@@ -478,13 +457,6 @@ class Vectors(Layer):
         self._length = float(length)
 
         self._update_mesh()
-        # vertices, triangles = generate_vector_meshes(
-        #     self.data[:, :, list(self._dims_displayed)],
-        #     self.edge_width,
-        #     self._length,
-        # )
-        # self._mesh_vertices = vertices
-        # self._mesh_triangles = triangles
         self._displayed_stored = copy(self._dims_displayed)
 
         self.events.length()
@@ -625,7 +597,8 @@ class Vectors(Layer):
     ):
         self._edge.contrast_limits = contrast_limits
 
-    def _view_face_color(self, view_indices, view_alphas, ndisplay, ndim, edge_color) -> np.ndarray:
+    @staticmethod
+    def _view_face_color(view_indices, view_alphas, ndisplay, ndim, edge_color) -> np.ndarray:
         """(Mx4) np.ndarray : colors for the M in view vectors"""
         face_color = edge_color[view_indices]
         face_color[:, -1] *= view_alphas
@@ -649,7 +622,7 @@ class Vectors(Layer):
         the updated indices. 
 
         When `out_of_display` is False, it returns all vectors within 
-        0.5 distance of the slice TODO: what? why??
+        0.5 distance of the slice 
 
         Parameters
         ----------
@@ -676,7 +649,7 @@ class Vectors(Layer):
 
         # if data exists
         if len(self.data) > 0:
-            # TODO I don't understand this
+            # reduce dimensionality by taking only the starting point of the vector
             data = self.data[:, 0, not_disp]
             distances = abs(data - indices[not_disp])
 
@@ -712,56 +685,6 @@ class Vectors(Layer):
     def _set_view_slice(self):
         """Sets the view given the indices to slice with."""
         raise NotImplementedError
-        indices, alphas = self._slice_data(self._slice_indices)
-        if not self._dims_displayed == self._displayed_stored:
-            vertices, triangles = generate_vector_meshes(
-                self.data[:, :, list(self._dims_displayed)],
-                self.edge_width,
-                self.length,
-            )
-            self._mesh_vertices = vertices
-            self._mesh_triangles = triangles
-            self._displayed_stored = copy(self._dims_displayed)
-
-        vertices = self._mesh_vertices
-        disp = list(self._dims_displayed)
-
-        if len(self.data) == 0:
-            faces = []
-            self._view_data = np.empty((0, 2, 2))
-            self._view_indices = []
-        elif self.ndim > 2:
-            indices, alphas = self._slice_data(self._slice_indices)
-            self._view_indices = indices
-            self._view_alphas = alphas
-            self._view_data = self.data[np.ix_(indices, [0, 1], disp)]
-            if len(indices) == 0:
-                faces = []
-            else:
-                keep_inds = np.repeat(2 * indices, 2)
-                keep_inds[1::2] = keep_inds[1::2] + 1
-                if self._ndisplay == 3:
-                    keep_inds = np.concatenate(
-                        [
-                            keep_inds,
-                            len(self._mesh_triangles) // 2 + keep_inds,
-                        ],
-                        axis=0,
-                    )
-                faces = self._mesh_triangles[keep_inds]
-        else:
-            faces = self._mesh_triangles
-            self._view_data = self.data[:, :, disp]
-            self._view_indices = np.arange(self.data.shape[0])
-            self._view_alphas = 1.0
-
-        if len(faces) == 0:
-            self._view_vertices = []
-            self._view_faces = []
-        else:
-            self._view_vertices = vertices
-            self._view_faces = faces
-        
 
     def _update_thumbnail(self):
         """ Update thumbnail with current vectors and colors."""
@@ -880,11 +803,6 @@ class Vectors(Layer):
 
         # TODO: add check to ensure that mesh is up to date
 
-        # # expand indices to include out of slice as needed,
-        # # and get alpha values
-        # indices, alphas = self._slice_data(self._slice_indices)
-
-        # slice indices is now _get_slice_indices
         # expand indices to include out of slice as needed,
         # and get alpha values
         slice_indices = self._get_slice_indices(request)
@@ -938,7 +856,6 @@ class Vectors(Layer):
 
         face_color = self._view_face_color(view_indices, view_alphas, request.ndisplay, request.ndim, request.edge_color) # uses view_alphas and view_indices
 
-        # TODO: what is this?
         if self._ndisplay == 3 and self.ndim == 2:
             vertices = np.pad(vertices, ((0, 0), (0, 1)), mode='constant')
 
