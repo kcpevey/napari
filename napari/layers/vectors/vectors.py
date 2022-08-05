@@ -1,6 +1,7 @@
 import warnings
 from copy import copy
 from typing import Any, Dict, List, Tuple, Union
+from dataclasses import dataclass, field
 import logging
 
 import numpy as np
@@ -16,7 +17,7 @@ from ..utils.color_manager import ColorManager
 from ..utils.color_transformations import ColorType
 from ..utils.layer_utils import _FeatureTable
 from ._vector_utils import fix_data_vectors, generate_vector_meshes
-from napari.layers.base.base import LayerSliceRequest, LayerSliceResponse
+from napari.layers.base.base import _LayerSliceRequest, _LayerSliceResponse
 
 from napari.components import Dims
 
@@ -27,6 +28,20 @@ class VectorSliceData():
     alphas: Any
     vertices: Any
     face_color: Any
+
+@dataclass(frozen=True)
+class _VectorSliceRequest(_LayerSliceRequest):
+    # rgb: bool = field(repr=False)
+    # data_level: int = field(repr=False)
+    out_of_slice_display: bool  # TODO: make this accurate
+    mesh_vertices: np.array # (4N, 2) array
+    mesh_triangles: np.array # (2N, 3) array
+    edge_color: str
+
+
+@dataclass(frozen=True)
+class _VectorSliceResponse(_LayerSliceResponse):
+    thumbnail: Any = field(repr=False)
 
 class Vectors(Layer):
     """
@@ -761,27 +776,20 @@ class Vectors(Layer):
         """
         return None
 
-    def _make_slice_request(self, dims: Dims) -> LayerSliceRequest:
-        offset = dims.ndim - self.ndim
-        order = [i - offset for i in dims.order if i >= offset]
+    def _make_slice_request(self, dims: Dims) -> _LayerSliceRequest:
+        LOGGER.debug('Vectors._make_slice_request: %s', dims)
+        base_request = super()._make_slice_request(dims)
 
         # this is required because this is called twice. The second time needs this update
         # the second call is from setting ndisplay
-        self._update_mesh()  # sledgehammer to avoid more delicate implementation...
+        self._update_mesh()  # TODO sledgehammer to avoid more delicate implementation...
 
-        return LayerSliceRequest(
-            ndim=self.ndim,
-            ndisplay=dims.ndisplay,
-            point=dims.point[offset:],
-            dims_displayed=order[-dims.ndisplay :],
-            dims_not_displayed=order[: -dims.ndisplay],
-            # Just a temporary hack to play around with supporting thick slices.
-            thickness_not_displayed=(self.thickness,)
-            * (dims.ndim - dims.ndisplay),
+        return _VectorSliceRequest(
             out_of_slice_display=self._out_of_slice_display,
             mesh_vertices=self._mesh_vertices,
             mesh_triangles=self._mesh_triangles,
             edge_color=self.edge_color,
+            **(base_request.asdict()),
         )
 
     def _update_mesh(self):
@@ -798,15 +806,15 @@ class Vectors(Layer):
         """
         LOGGER.debug('Vectors._update_mesh')
         vertices, triangles = generate_vector_meshes(
-                self.data[:, :, list(self._dims_displayed)],
-                self.edge_width,
-                self.length,
+            self.data[:, :, list(self._dims_displayed)],
+            self.edge_width,
+            self.length,
         )
         self._mesh_vertices = vertices
         self._mesh_triangles = triangles
         # self._displayed_stored = copy(self.dims_displayed)  # TODO: kcp wants to remove this, it should be handed with this new trigger method
 
-    def _get_slice(self, request: LayerSliceRequest) -> LayerSliceResponse:
+    def _get_slice(self, request: _VectorSliceRequest) -> _VectorSliceResponse:
         """New method"""
         LOGGER.debug('Vectors._get_slice : %s', request)
 
@@ -877,7 +885,7 @@ class Vectors(Layer):
             face_color=face_color,
         )
 
-        return LayerSliceResponse(
+        return _VectorSliceResponse(
             request=request,
             data=data,
             thumbnail=thumbnail,

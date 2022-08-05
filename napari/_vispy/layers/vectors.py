@@ -4,7 +4,7 @@ import numpy as np
 
 from ..visuals.vectors import VectorsVisual
 from .base import VispyBaseLayer
-from napari.layers.base.base import LayerSliceResponse
+from napari.layers.base.base import _LayerSliceResponse
 
 LOGGER = logging.getLogger("napari._vispy.layers.vectors")
 
@@ -19,7 +19,7 @@ class VispyVectorsLayer(VispyBaseLayer):
         self.reset()
         # self._on_data_change()
 
-    def _set_slice(self, response: LayerSliceResponse) -> None:
+    def _set_slice(self, response: _LayerSliceResponse) -> None:
         """This method replaces the old on_data_change
         
         Response data needs face_color
