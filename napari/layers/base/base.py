@@ -111,6 +111,28 @@ def no_op(layer: Layer, event: Event) -> None:
     return None
 
 
+# class LayerSliceRequest(BaseModel):
+#     ndim: int
+#     ndisplay: int
+#     point: Tuple[float, ...]
+#     dims_displayed: Tuple[int, ...]
+#     dims_not_displayed: Tuple[int, ...]
+#     thickness_not_displayed: Tuple[int, ...]
+#     out_of_slice_display: bool = False # unique to vectors and points
+#     # unique to vectors
+#     mesh_vertices: Any
+#     mesh_triangles: Any
+#     edge_color: Any
+
+
+
+# class LayerSliceResponse(BaseModel):
+#     request: LayerSliceRequest
+#     data: Any
+#     thumbnail: Any
+#     transform: Any
+
+
 @mgui.register_type(choices=get_layers, return_callback=add_layer_to_viewer)
 class Layer(KeymapProvider, MousemapProvider, ABC):
     """Base layer class.
@@ -768,6 +790,72 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
             world=extent_world,
             step=abs(data_to_world.scale),
         )
+
+    # old/mine
+    # def _make_slice_request(self, dims: Dims) -> LayerSliceRequest:
+    #     offset = dims.ndim - self.ndim
+    #     order = [i - offset for i in dims.order if i >= offset]
+    #     return LayerSliceRequest(
+    #         ndim=self.ndim,
+    #         ndisplay=dims.ndisplay,
+    #         point=dims.point[offset:],
+    #         dims_displayed=order[-dims.ndisplay :],
+    #         dims_not_displayed=order[: -dims.ndisplay],
+    #         # Just a temporary hack to play around with supporting thick slices.
+    #         thickness_not_displayed=(self.thickness,)
+    #         * (dims.ndim - dims.ndisplay),
+    #     )
+
+    # def _get_slice_indices(self, request: LayerSliceRequest) -> tuple:
+    #     LOGGER.debug('Layer._get_slice_indices: %s', request)
+
+    #     # Copied from _slice_indices and modified to not depend on slice
+    #     # state that we want to remove.
+
+    #     # If all data is display, return full slices.
+    #     if request.ndim < request.ndisplay:
+    #         return (slice(None),) * request.ndim
+
+    #     inv_transform = self._data_to_world.inverse
+    #     # Subspace spanned by non displayed dimensions
+    #     non_displayed_subspace = np.zeros(request.ndim)
+    #     for d in request.dims_not_displayed:
+    #         non_displayed_subspace[d] = 1
+    #     # Map subspace through inverse transform, ignoring translation
+    #     _inv_transform = Affine(
+    #         ndim=request.ndim,
+    #         linear_matrix=inv_transform.linear_matrix,
+    #         translate=None,
+    #     )
+    #     mapped_nd_subspace = _inv_transform(non_displayed_subspace)
+    #     # Look at displayed subspace
+    #     displayed_mapped_subspace = (
+    #         mapped_nd_subspace[d] for d in request.dims_displayed
+    #     )
+    #     # Check that displayed subspace is null
+    #     if any(abs(v) > 1e-8 for v in displayed_mapped_subspace):
+    #         warnings.warn(
+    #             trans._(
+    #                 'Non-orthogonal slicing is being requested, but is not fully supported. Data is displayed without applying an out-of-slice rotation or shear component.',
+    #                 deferred=True,
+    #             ),
+    #             category=UserWarning,
+    #         )
+
+    #     slice_inv_transform = inv_transform.set_slice(
+    #         list(request.dims_not_displayed)
+    #     )
+    #     world_pts = [request.point[ax] for ax in request.dims_not_displayed]
+    #     data_pts = slice_inv_transform(world_pts)
+    #     if getattr(self, "_round_index", True):
+    #         # A round is taken to convert these values to slicing integers
+    #         data_pts = np.round(data_pts).astype(int)
+
+    #     indices = [slice(None)] * request.ndim
+    #     for i, ax in enumerate(request.dims_not_displayed):
+    #         indices[ax] = data_pts[i]
+
+    #     return tuple(indices)
 
     @property
     def _slice_indices(self):
@@ -1698,6 +1786,12 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
         shape_threshold : tuple
             Requested shape of field of view in data coordinates.
         """
+        LOGGER.debug(
+            '_update_draw: %s, %s, %s',
+            scale_factor,
+            list(corner_pixels_displayed),
+            shape_threshold,
+        )
         self.scale_factor = scale_factor
 
         displayed_axes = self._displayed_axes
