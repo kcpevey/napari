@@ -1,6 +1,7 @@
 import warnings
 from copy import copy
-from typing import Dict, List, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union
+import logging
 
 import numpy as np
 import pandas as pd
@@ -15,7 +16,17 @@ from ..utils.color_manager import ColorManager
 from ..utils.color_transformations import ColorType
 from ..utils.layer_utils import _FeatureTable
 from ._vector_utils import fix_data_vectors, generate_vector_meshes
+from napari.layers.base.base import LayerSliceRequest, LayerSliceResponse
 
+from napari.components import Dims
+
+LOGGER = logging.getLogger("napari.layers.vectors")
+
+class VectorSliceData():
+    faces: Any
+    alphas: Any
+    vertices: Any
+    face_color: Any
 
 class Vectors(Layer):
     """
@@ -58,7 +69,7 @@ class Vectors(Layer):
         (property.min(), property.max())
     out_of_slice_display : bool
         If True, renders vectors not just in central plane but also slightly out of slice
-        according to specified point marker size.
+        according to specified vector length.
     name : str
         Name of the layer.
     metadata : dict
@@ -124,7 +135,7 @@ class Vectors(Layer):
         (property.min(), property.max())
     out_of_slice_display : bool
         If True, renders vectors not just in central plane but also slightly out of slice
-        according to specified point marker size.
+        according to specified vector length.
 
     Notes
     -----
@@ -217,9 +228,9 @@ class Vectors(Layer):
             edge_color=Event,
             edge_color_mode=Event,
             properties=Event,
-            out_of_slice_display=Event,
             features=Event,
             feature_defaults=Event,
+            out_of_slice_display=Event,
         )
 
         # Save the vector style params
@@ -421,7 +432,7 @@ class Vectors(Layer):
 
     @property
     def out_of_slice_display(self) -> bool:
-        """bool: renders vectors slightly out of slice."""
+        """bool: if true, renders vectors that are slightly out of slice."""
         return self._out_of_slice_display
 
     @out_of_slice_display.setter
@@ -593,27 +604,39 @@ class Vectors(Layer):
     ):
         self._edge.contrast_limits = contrast_limits
 
-    @property
-    def _view_face_color(self) -> np.ndarray:
+    @staticmethod
+    def _view_face_color(view_indices, view_alphas, ndisplay, ndim, edge_color) -> np.ndarray:
         """(Mx4) np.ndarray : colors for the M in view vectors"""
-        face_color = self.edge_color[self._view_indices]
-        face_color[:, -1] *= self._view_alphas
+        face_color = edge_color[view_indices]
+        face_color[:, -1] *= view_alphas
         face_color = np.repeat(face_color, 2, axis=0)
 
-        if self._ndisplay == 3 and self.ndim > 2:
+        if ndisplay == 3 and ndim > 2:
             face_color = np.vstack([face_color, face_color])
 
         return face_color
 
     def _slice_data(
-        self, dims_indices
+        self, dims_indices, dims_not_displayed, out_of_slice_display
     ) -> Tuple[List[int], Union[float, np.ndarray]]:
         """Determines the slice of vectors given the indices.
 
+        Uses the dimension indices
+        For `out_of_slice_display`, this calculates the distance to the 
+        vector. Depending on the vector length, it will expand the indices
+        to include these "out of slice" vectors, and provide an alpha to 
+        indicate how far from the current slice the vector is. It returns 
+        the updated indices. 
+
+        When `out_of_display` is False, it returns all vectors within 
+        0.5 distance of the slice 
+
         Parameters
         ----------
-        dims_indices : sequence of int, float or slice objects
-            Indices of the slicing plane
+        dims_indices : sequence of int or slice
+            Indices to slice with.
+        dims_not_displayed
+        out_of_slice_display
 
         Returns
         -------
@@ -626,31 +649,26 @@ class Vectors(Layer):
             while vectors passing through the current slice are assigned progressively lower
             values, based on how far from the current slice they originate.
         """
+        # ensure this is a list
+        not_disp = list(dims_not_displayed)
+        # ensure this is an array
+        indices = np.array(dims_indices)
 
+        # if data exists
         if len(self.data) > 0:
-            # ensure dims not displayed is a list
-            dims_not_displayed = list(self._dims_not_displayed)
+            # reduce dimensionality by taking only the starting point of the vector
+            data = self.data[:, 0, not_disp]
+            distances = abs(data - indices[not_disp])
 
-            # We want a numpy array so we can use fancy indexing with the non-displayed
-            # indices, but as dims_indices can (and often/always does) contain slice
-            # objects, the array has dtype=object which is then very slow for the
-            # arithmetic below.
-            # promote slicing plane to array so we can index into it, project as type float
-            not_disp_indices = np.array(dims_indices)[
-                dims_not_displayed
-            ].astype(float)
-            # get the anchor points (starting positions) of the vector layers in not displayed dims
-            data = self.data[:, 0, dims_not_displayed]
-            # calculate distances from anchor points to the slicing plane
-            distances = abs(data - not_disp_indices)
-            # if we need to include vectors that are out of this slice
-            if self.out_of_slice_display is True:
-                # get the scaled projected vectors
+            # if viewing vectors that are slightly out of display, use
+            # alphas to indicate distance from current slice
+            if out_of_slice_display:
+                # find the intersecting vectors based on the length of vector
                 projected_lengths = abs(
-                    self.data[:, 1, dims_not_displayed] * self.length
+                    self.data[:, 1, not_disp] * self.length
                 )
-                # find where the distance to plane is less than the scaled vector
                 matches = np.all(distances <= projected_lengths, axis=1)
+                # calculate alpha array
                 alpha_match = projected_lengths[matches]
                 alpha_match[alpha_match == 0] = 1
                 alpha_per_dim = (
@@ -658,62 +676,31 @@ class Vectors(Layer):
                 ) / alpha_match
                 alpha_per_dim[alpha_match == 0] = 1
                 alpha = np.prod(alpha_per_dim, axis=1).astype(float)
+            # if not viewing out of slice vectors, set all alphas as opaque
             else:
+                # TODO I don't understand this - why 0.5?
                 matches = np.all(distances <= 0.5, axis=1)
                 alpha = 1.0
+
             slice_indices = np.where(matches)[0].astype(int)
             return slice_indices, alpha
+
+        # if no data, return empty values
         else:
             return [], np.empty(0)
 
     def _set_view_slice(self):
         """Sets the view given the indices to slice with."""
-
-        indices, alphas = self._slice_data(self._slice_indices)
-        if not self._dims_displayed == self._displayed_stored:
-            self._update_mesh()
-
-        vertices = self._mesh_vertices
-        disp = list(self._dims_displayed)
-
-        if len(self.data) == 0:
-            faces = []
-            self._view_data = np.empty((0, 2, 2))
-            self._view_indices = []
-        elif self.ndim > 2:
-            indices, alphas = self._slice_data(self._slice_indices)
-            self._view_indices = indices
-            self._view_alphas = alphas
-            self._view_data = self.data[np.ix_(indices, [0, 1], disp)]
-            if len(indices) == 0:
-                faces = []
-            else:
-                keep_inds = np.repeat(2 * indices, 2)
-                keep_inds[1::2] = keep_inds[1::2] + 1
-                if self._ndisplay == 3:
-                    keep_inds = np.concatenate(
-                        [
-                            keep_inds,
-                            len(self._mesh_triangles) // 2 + keep_inds,
-                        ],
-                        axis=0,
-                    )
-                faces = self._mesh_triangles[keep_inds]
-        else:
-            faces = self._mesh_triangles
-            self._view_data = self.data[:, :, disp]
-            self._view_indices = np.arange(self.data.shape[0])
-            self._view_alphas = 1.0
-
-        if len(faces) == 0:
-            self._view_vertices = []
-            self._view_faces = []
-        else:
-            self._view_vertices = vertices
-            self._view_faces = faces
+        raise NotImplementedError
 
     def _update_thumbnail(self):
-        """Update thumbnail with current vectors and colors."""
+        """ Update thumbnail with current vectors and colors."""
+        # TODO: return thumbnail when slicing instead of updating in-place.
+        pass
+
+    def _make_thumbnail(self, view_data, view_indices):
+        """ THIS IS FROM THE OLD UPDATE_THUMBNAIL METHOD
+        Update thumbnail with current vectors and colors."""
         # calculate min vals for the vertices and pad with 0.5
         # the offset is needed to ensure that the top left corner of the
         # vectors corresponds to the top left corner of the thumbnail
@@ -730,15 +717,15 @@ class Vectors(Layer):
         zoom_factor = np.divide(self._thumbnail_shape[:2], shape).min()
 
         # vectors = copy(self._data_view[:, :, -2:])
-        if self._view_data.shape[0] > self._max_vectors_thumbnail:
+        if view_data.shape[0] > self._max_vectors_thumbnail:
             thumbnail_indices = np.random.randint(
-                0, self._view_data.shape[0], self._max_vectors_thumbnail
+                0, view_data.shape[0], self._max_vectors_thumbnail
             )
-            vectors = copy(self._view_data[thumbnail_indices, :, -2:])
-            thumbnail_color_indices = self._view_indices[thumbnail_indices]
+            vectors = copy(view_data[thumbnail_indices, :, -2:])
+            thumbnail_color_indices = view_indices[thumbnail_indices]
         else:
-            vectors = copy(self._view_data[:, :, -2:])
-            thumbnail_color_indices = self._view_indices
+            vectors = copy(view_data[:, :, -2:])
+            thumbnail_color_indices = view_indices
         vectors[:, 1, :] = vectors[:, 0, :] + vectors[:, 1, :] * self.length
         downsampled = (vectors - offset) * zoom_factor
         downsampled = np.clip(
@@ -756,7 +743,8 @@ class Vectors(Layer):
             for x, y in zip(x_vals, y_vals):
                 colormapped[int(x), int(y), :] = ec
         colormapped[..., 3] *= self.opacity
-        self.thumbnail = colormapped
+
+        return colormapped
 
     def _get_value(self, position):
         """Value of the data at a position in data coordinates.
@@ -773,15 +761,125 @@ class Vectors(Layer):
         """
         return None
 
+    def _make_slice_request(self, dims: Dims) -> LayerSliceRequest:
+        offset = dims.ndim - self.ndim
+        order = [i - offset for i in dims.order if i >= offset]
+
+        # this is required because this is called twice. The second time needs this update
+        # the second call is from setting ndisplay
+        self._update_mesh()  # sledgehammer to avoid more delicate implementation...
+
+        return LayerSliceRequest(
+            ndim=self.ndim,
+            ndisplay=dims.ndisplay,
+            point=dims.point[offset:],
+            dims_displayed=order[-dims.ndisplay :],
+            dims_not_displayed=order[: -dims.ndisplay],
+            # Just a temporary hack to play around with supporting thick slices.
+            thickness_not_displayed=(self.thickness,)
+            * (dims.ndim - dims.ndisplay),
+            out_of_slice_display=self._out_of_slice_display,
+            mesh_vertices=self._mesh_vertices,
+            mesh_triangles=self._mesh_triangles,
+            edge_color=self.edge_color,
+        )
+
     def _update_mesh(self):
         """Generate a new vector mesh and update the stored vertices and
         trianges for the mesh.
+
+        # TODO: add trigger connection - 
+        #       if dims_displayed changes, trigger remesh.
+        #       Which is actually the same as: if _dims_order or _ndisplay changes, trigger remesh
+
+        # if you change the number of dims displayed, you'll need to 
+        # regenerate meshes
+
         """
+        LOGGER.debug('Vectors._update_mesh')
         vertices, triangles = generate_vector_meshes(
-            self.data[:, :, list(self._dims_displayed)],
-            self.edge_width,
-            self.length,
+                self.data[:, :, list(self._dims_displayed)],
+                self.edge_width,
+                self.length,
         )
         self._mesh_vertices = vertices
         self._mesh_triangles = triangles
-        self._displayed_stored = copy(self._dims_displayed)
+        # self._displayed_stored = copy(self.dims_displayed)  # TODO: kcp wants to remove this, it should be handed with this new trigger method
+
+    def _get_slice(self, request: LayerSliceRequest) -> LayerSliceResponse:
+        """New method"""
+        LOGGER.debug('Vectors._get_slice : %s', request)
+
+        # TODO: add check to ensure that mesh is up to date
+
+        # expand indices to include out of slice as needed,
+        # and get alpha values
+        slice_indices = self._get_slice_indices(request)
+        indices, alphas = self._slice_data(slice_indices, request.dims_not_displayed, request.out_of_slice_display)
+
+        # assume the mesh is up to date at this point -
+        # all mesh generation should be triggered by the new method `_update_mesh`
+
+        disp = list(request.dims_displayed)
+
+        # if there is no data, set empty
+        if len(self.data) == 0 or len(indices) == 0:
+            view_faces =  np.array([[0, 1, 2]])
+            view_data = np.empty((0, 2, 2))
+            view_indices = []
+            view_vertices = np.zeros((3, request.ndisplay))
+        # if more than 2D, reduce the data and mesh dimensions
+        elif request.ndim > 2:
+            # TODO: is this line necessary?
+            indices, alphas = self._slice_data(slice_indices, request.dims_not_displayed, request.out_of_slice_display)
+
+            view_indices = indices
+            view_alphas = alphas
+            view_data = self.data[np.ix_(indices, [0, 1], disp)]
+            keep_inds = np.repeat(2 * indices, 2)
+            keep_inds[1::2] = keep_inds[1::2] + 1
+            if request.ndisplay == 3:
+                keep_inds = np.concatenate(
+                    [
+                        keep_inds,
+                        len(request.mesh_triangles) // 2 + keep_inds,
+                    ],
+                    axis=0,
+                )
+            view_faces = request.mesh_triangles[keep_inds]
+            view_vertices = request.mesh_vertices
+        else:
+            view_faces = request.mesh_triangles
+            view_vertices = request.mesh_vertices
+            view_data = self.data[:, :, disp]
+            view_indices = np.arange(self.data.shape[0])
+            view_alphas = 1.0
+
+        thumbnail = self._make_thumbnail(view_data, view_indices)
+
+        # #############################################
+        # logic from vispy on_data_change:
+
+        # prep for vispy by translating [z,y,x]->[x,y,z]
+        vertices = view_vertices[:, ::-1]
+
+        face_color = self._view_face_color(view_indices, view_alphas, request.ndisplay, request.ndim, request.edge_color) # uses view_alphas and view_indices
+
+        if self._ndisplay == 3 and self.ndim == 2:
+            vertices = np.pad(vertices, ((0, 0), (0, 1)), mode='constant')
+
+        # ###################################################
+
+        data = VectorSliceData(
+            faces=view_faces, 
+            alphas=view_alphas, 
+            vertices=vertices, 
+            face_color=face_color,
+        )
+
+        return LayerSliceResponse(
+            request=request,
+            data=data,
+            thumbnail=thumbnail,
+        )
+
