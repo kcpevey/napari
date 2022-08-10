@@ -17,23 +17,21 @@ from ..utils.color_manager import ColorManager
 from ..utils.color_transformations import ColorType
 from ..utils.layer_utils import _FeatureTable
 from ._vector_utils import fix_data_vectors, generate_vector_meshes
-from napari.layers.base.base import _LayerSliceRequest, _LayerSliceResponse
+from ...layers.base.base import _LayerSliceRequest, _LayerSliceResponse
 
-from napari.components import Dims
+# from ...components import Dims
 
 LOGGER = logging.getLogger("napari.layers.vectors")
 
 class VectorSliceData():
-    faces: Any
+    faces: Any  # TODO is this necessary if its in the slice request?
     alphas: Any
     vertices: Any
     face_color: Any
 
 @dataclass(frozen=True)
 class _VectorSliceRequest(_LayerSliceRequest):
-    # rgb: bool = field(repr=False)
-    # data_level: int = field(repr=False)
-    out_of_slice_display: bool  # TODO: make this accurate
+    out_of_slice_display: bool
     mesh_vertices: np.array # (4N, 2) array
     mesh_triangles: np.array # (2N, 3) array
     edge_color: str
@@ -422,6 +420,9 @@ class Vectors(Layer):
         )
         return state
 
+    def _is_async(self) -> bool:
+        return True
+
     def _get_ndim(self) -> int:
         """Determine number of dimensions of the layer."""
         return self.data.shape[2]
@@ -776,7 +777,7 @@ class Vectors(Layer):
         """
         return None
 
-    def _make_slice_request(self, dims: Dims) -> _LayerSliceRequest:
+    def _make_slice_request(self, dims: Any) -> _LayerSliceRequest:
         LOGGER.debug('Vectors._make_slice_request: %s', dims)
         base_request = super()._make_slice_request(dims)
 
