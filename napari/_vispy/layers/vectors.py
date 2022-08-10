@@ -4,7 +4,7 @@ import numpy as np
 
 from ..visuals.vectors import VectorsVisual
 from .base import VispyBaseLayer
-from napari.layers.base.base import _LayerSliceResponse
+from ...layers.base.base import _LayerSliceResponse
 
 LOGGER = logging.getLogger("napari._vispy.layers.vectors")
 
