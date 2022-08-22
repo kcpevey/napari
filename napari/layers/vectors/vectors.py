@@ -1,6 +1,6 @@
 import warnings
 from copy import copy
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union, Optional
 from dataclasses import dataclass, field
 import logging
 
@@ -23,6 +23,7 @@ from ...layers.base.base import _LayerSliceRequest, _LayerSliceResponse
 
 LOGGER = logging.getLogger("napari.layers.vectors")
 
+@dataclass(frozen=True)
 class VectorSliceData():
     faces: Any  # TODO is this necessary if its in the slice request?
     alphas: Any
@@ -890,5 +891,6 @@ class Vectors(Layer):
             request=request,
             data=data,
             thumbnail=thumbnail,
+            data_to_world=self.data_to_world,
         )
 
