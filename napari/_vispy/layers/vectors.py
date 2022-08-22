@@ -30,9 +30,9 @@ class VispyVectorsLayer(VispyBaseLayer):
         #     vertices=vertices, faces=faces, color=self.layer.current_edge_color
         # )
         self.node.set_data(
-            vertices=response.data.vertices,
-            faces=response.data.faces,
-            face_colors=response.data.face_color,
+            vertices=response.vertices,
+            faces=response.faces,
+            face_colors=response.face_color,
         )
 
         self.node.update()

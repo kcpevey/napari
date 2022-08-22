@@ -23,24 +23,52 @@ from ...layers.base.base import _LayerSliceRequest, _LayerSliceResponse
 
 LOGGER = logging.getLogger("napari.layers.vectors")
 
-@dataclass(frozen=True)
-class VectorSliceData():
-    faces: Any  # TODO is this necessary if its in the slice request?
-    alphas: Any
-    vertices: Any
-    face_color: Any
+
+# @dataclass(frozen=True)
+# class VectorSliceData():
+#     faces: Any  # TODO is this necessary if its in the slice request?
+#     alphas: Any
+#     vertices: Any
+#     face_color: Any
+
 
 @dataclass(frozen=True)
 class _VectorSliceRequest(_LayerSliceRequest):
-    out_of_slice_display: bool
-    mesh_vertices: np.array # (4N, 2) array
-    mesh_triangles: np.array # (2N, 3) array
-    edge_color: str
+    """
+    Inherited from _LayerSliceRequest:
+    data: Any = field(repr=False)
+    data_to_world: Affine = field(repr=False)
+    ndim: int
+    ndisplay: int
+    point: Tuple[float, ...]
+    dims_order: Tuple[int, ...]
+    dims_displayed: Tuple[int, ...] = field(repr=False)
+    dims_not_displayed: Tuple[int, ...] = field(repr=False)
+    multiscale: bool = field(repr=False)
+    corner_pixels: np.ndarray
+    round_index: bool = field(repr=False)
+    dask_config: DaskIndexer = field(repr=False)    
+    """
+    out_of_slice_display: bool = field(repr=False)
+    mesh_vertices: np.array = field(repr=False)  # (4N, 2) array
+    mesh_triangles: np.array = field(repr=False)  # (2N, 3) array
+    edge_color: str = field(repr=False)
 
 
 @dataclass(frozen=True)
 class _VectorSliceResponse(_LayerSliceResponse):
+    """
+    Inherited from _LayerSliceResponse:
+    request: _LayerSliceRequest # inherited
+    data: Any = field(repr=False)
+    data_to_world: Affine = field(repr=False) # inherited
+    """
     thumbnail: Any = field(repr=False)
+    faces: np.array = field(repr=False)  # (2N, 3) array
+    alphas: Any
+    vertices: np.array = field(repr=False)  # (4N, 2) array
+    face_color: np.ndarray
+
 
 class Vectors(Layer):
     """
@@ -814,13 +842,10 @@ class Vectors(Layer):
         )
         self._mesh_vertices = vertices
         self._mesh_triangles = triangles
-        # self._displayed_stored = copy(self.dims_displayed)  # TODO: kcp wants to remove this, it should be handed with this new trigger method
 
     def _get_slice(self, request: _VectorSliceRequest) -> _VectorSliceResponse:
         """New method"""
         LOGGER.debug('Vectors._get_slice : %s', request)
-
-        # TODO: add check to ensure that mesh is up to date
 
         # expand indices to include out of slice as needed,
         # and get alpha values
@@ -833,7 +858,7 @@ class Vectors(Layer):
         disp = list(request.dims_displayed)
 
         # if there is no data, set empty
-        if len(self.data) == 0 or len(indices) == 0:
+        if len(request.data) == 0 or len(indices) == 0:
             view_faces =  np.array([[0, 1, 2]])
             view_data = np.empty((0, 2, 2))
             view_indices = []
@@ -845,7 +870,7 @@ class Vectors(Layer):
 
             view_indices = indices
             view_alphas = alphas
-            view_data = self.data[np.ix_(indices, [0, 1], disp)]
+            view_data = request.data[np.ix_(indices, [0, 1], disp)]
             keep_inds = np.repeat(2 * indices, 2)
             keep_inds[1::2] = keep_inds[1::2] + 1
             if request.ndisplay == 3:
@@ -861,14 +886,11 @@ class Vectors(Layer):
         else:
             view_faces = request.mesh_triangles
             view_vertices = request.mesh_vertices
-            view_data = self.data[:, :, disp]
-            view_indices = np.arange(self.data.shape[0])
+            view_data = request.data[:, :, disp]
+            view_indices = np.arange(request.data.shape[0])
             view_alphas = 1.0
 
         thumbnail = self._make_thumbnail(view_data, view_indices)
-
-        # #############################################
-        # logic from vispy on_data_change:
 
         # prep for vispy by translating [z,y,x]->[x,y,z]
         vertices = view_vertices[:, ::-1]
@@ -878,19 +900,13 @@ class Vectors(Layer):
         if self._ndisplay == 3 and self.ndim == 2:
             vertices = np.pad(vertices, ((0, 0), (0, 1)), mode='constant')
 
-        # ###################################################
-
-        data = VectorSliceData(
-            faces=view_faces, 
-            alphas=view_alphas, 
-            vertices=vertices, 
-            face_color=face_color,
-        )
-
         return _VectorSliceResponse(
             request=request,
-            data=data,
+            data=request.data,
+            data_to_world=request.data_to_world,
             thumbnail=thumbnail,
-            data_to_world=self.data_to_world,
+            faces=view_faces,
+            alphas=view_alphas,
+            vertices=vertices,
+            face_color=face_color,
         )
-

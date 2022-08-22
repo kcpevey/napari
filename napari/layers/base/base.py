@@ -111,28 +111,6 @@ def no_op(layer: Layer, event: Event) -> None:
     return None
 
 
-# class LayerSliceRequest(BaseModel):
-#     ndim: int
-#     ndisplay: int
-#     point: Tuple[float, ...]
-#     dims_displayed: Tuple[int, ...]
-#     dims_not_displayed: Tuple[int, ...]
-#     thickness_not_displayed: Tuple[int, ...]
-#     out_of_slice_display: bool = False # unique to vectors and points
-#     # unique to vectors
-#     mesh_vertices: Any
-#     mesh_triangles: Any
-#     edge_color: Any
-
-
-
-# class LayerSliceResponse(BaseModel):
-#     request: LayerSliceRequest
-#     data: Any
-#     thumbnail: Any
-#     transform: Any
-
-
 @mgui.register_type(choices=get_layers, return_callback=add_layer_to_viewer)
 class Layer(KeymapProvider, MousemapProvider, ABC):
     """Base layer class.
