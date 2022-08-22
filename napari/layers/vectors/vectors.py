@@ -24,14 +24,6 @@ from ...layers.base.base import _LayerSliceRequest, _LayerSliceResponse
 LOGGER = logging.getLogger("napari.layers.vectors")
 
 
-# @dataclass(frozen=True)
-# class VectorSliceData():
-#     faces: Any  # TODO is this necessary if its in the slice request?
-#     alphas: Any
-#     vertices: Any
-#     face_color: Any
-
-
 @dataclass(frozen=True)
 class _VectorSliceRequest(_LayerSliceRequest):
     """
