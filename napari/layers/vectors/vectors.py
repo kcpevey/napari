@@ -56,10 +56,12 @@ class _VectorSliceResponse(_LayerSliceResponse):
     data_to_world: Affine = field(repr=False) # inherited
     """
     thumbnail: Any = field(repr=False)
-    faces: np.array = field(repr=False)  # (2N, 3) array
-    alphas: Any
-    vertices: np.array = field(repr=False)  # (4N, 2) array
-    face_color: np.ndarray
+    view_data: np.array = field(repr=False)  # (M, 2, 2) array
+    view_indices: np.array = field(repr=False)  # (1, M) array
+    view_faces: np.array = field(repr=False)  # (2N, 3) array
+    view_alphas: Any  # (M,) or float
+    view_vertices: np.array = field(repr=False)  # (4N, 2) array
+    view_face_color: np.ndarray
 
 
 class Vectors(Layer):
@@ -441,9 +443,6 @@ class Vectors(Layer):
         )
         return state
 
-    def _is_async(self) -> bool:
-        return True
-
     def _get_ndim(self) -> int:
         """Determine number of dimensions of the layer."""
         return self.data.shape[2]
@@ -798,7 +797,10 @@ class Vectors(Layer):
         """
         return None
 
-    def _make_slice_request(self, dims: Any) -> _LayerSliceRequest:
+    def _is_async(self) -> bool:
+        return True
+
+    def _make_slice_request(self, dims: Any) -> _VectorSliceRequest:
         LOGGER.debug('Vectors._make_slice_request: %s', dims)
         base_request = super()._make_slice_request(dims)
 
@@ -813,6 +815,14 @@ class Vectors(Layer):
             edge_color=self.edge_color,
             **(base_request.asdict()),
         )
+
+    def _set_slice(self, response: _VectorSliceResponse) -> None:
+        super()._set_slice(response)
+        self._view_data = response.view_data
+        self._view_indices = response.view_indices
+        self._view_alphas = response.view_alphas
+        self._view_vertices = response.view_vertices
+        self._view_faces = response.view_faces
 
     def _update_mesh(self):
         """Generate a new vector mesh and update the stored vertices and
@@ -851,7 +861,7 @@ class Vectors(Layer):
 
         # if there is no data, set empty
         if len(request.data) == 0 or len(indices) == 0:
-            view_faces =  np.array([[0, 1, 2]])
+            view_faces = np.array([[0, 1, 2]])
             view_data = np.empty((0, 2, 2))
             view_indices = []
             view_vertices = np.zeros((3, request.ndisplay))
@@ -887,7 +897,7 @@ class Vectors(Layer):
         # prep for vispy by translating [z,y,x]->[x,y,z]
         vertices = view_vertices[:, ::-1]
 
-        face_color = self._view_face_color(view_indices, view_alphas, request.ndisplay, request.ndim, request.edge_color) # uses view_alphas and view_indices
+        face_color = self._view_face_color(view_indices, view_alphas, request.ndisplay, request.ndim, request.edge_color)
 
         if self._ndisplay == 3 and self.ndim == 2:
             vertices = np.pad(vertices, ((0, 0), (0, 1)), mode='constant')
@@ -897,8 +907,10 @@ class Vectors(Layer):
             data=request.data,
             data_to_world=request.data_to_world,
             thumbnail=thumbnail,
-            faces=view_faces,
-            alphas=view_alphas,
-            vertices=vertices,
-            face_color=face_color,
+            view_data=view_data,
+            view_indices=view_indices,
+            view_faces=view_faces,
+            view_alphas=view_alphas,
+            view_vertices=vertices,
+            view_face_color=face_color,
         )

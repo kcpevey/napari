@@ -20,19 +20,16 @@ class VispyVectorsLayer(VispyBaseLayer):
         # self._on_data_change()
 
     def _set_slice(self, response: _LayerSliceResponse) -> None:
-        """This method replaces the old on_data_change
-        
-        Response data needs face_color
-        """
+        """This method replaces the old on_data_change"""
         LOGGER.debug('VispyVectorsLayer._set_slice : %s', response.request)
 
         # self.node.set_data(
         #     vertices=vertices, faces=faces, color=self.layer.current_edge_color
         # )
         self.node.set_data(
-            vertices=response.vertices,
-            faces=response.faces,
-            face_colors=response.face_color,
+            vertices=response.view_vertices,
+            faces=response.view_faces,
+            face_colors=response.view_face_color,
         )
 
         self.node.update()
