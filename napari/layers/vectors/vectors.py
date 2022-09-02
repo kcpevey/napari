@@ -19,7 +19,7 @@ from ..utils.layer_utils import _FeatureTable
 from ._vector_utils import fix_data_vectors, generate_vector_meshes
 from ...layers.base.base import _LayerSliceRequest, _LayerSliceResponse
 
-# from ...components import Dims
+from ...components import Dims
 
 LOGGER = logging.getLogger("napari.layers.vectors")
 
@@ -57,11 +57,11 @@ class _VectorSliceResponse(_LayerSliceResponse):
     """
     thumbnail: Any = field(repr=False)
     view_data: np.array = field(repr=False)  # (M, 2, 2) array
-    view_indices: np.array = field(repr=False)  # (1, M) array
-    view_faces: np.array = field(repr=False)  # (2N, 3) array
-    view_alphas: Any  # (M,) or float
-    view_vertices: np.array = field(repr=False)  # (4N, 2) array
-    view_face_color: np.ndarray
+    indices: np.array = field(repr=False)  # (1, M) array
+    faces: np.array = field(repr=False)  # (2N, 3) array
+    alphas: Any  # (M,) or float
+    vertices: np.array = field(repr=False)  # (4N, 2) array
+    face_color: np.ndarray
 
 
 class Vectors(Layer):
@@ -800,7 +800,7 @@ class Vectors(Layer):
     def _is_async(self) -> bool:
         return True
 
-    def _make_slice_request(self, dims: Any) -> _VectorSliceRequest:
+    def _make_slice_request(self, dims: "Dims") -> _VectorSliceRequest:
         LOGGER.debug('Vectors._make_slice_request: %s', dims)
         base_request = super()._make_slice_request(dims)
 
@@ -819,10 +819,10 @@ class Vectors(Layer):
     def _set_slice(self, response: _VectorSliceResponse) -> None:
         super()._set_slice(response)
         self._view_data = response.view_data
-        self._view_indices = response.view_indices
-        self._view_alphas = response.view_alphas
-        self._view_vertices = response.view_vertices
-        self._view_faces = response.view_faces
+        self._view_indices = response.indices
+        self._view_alphas = response.alphas
+        self._view_vertices = response.vertices
+        self._view_faces = response.faces
 
     def _update_mesh(self):
         """Generate a new vector mesh and update the stored vertices and
@@ -908,9 +908,9 @@ class Vectors(Layer):
             data_to_world=request.data_to_world,
             thumbnail=thumbnail,
             view_data=view_data,
-            view_indices=view_indices,
-            view_faces=view_faces,
-            view_alphas=view_alphas,
-            view_vertices=vertices,
-            view_face_color=face_color,
+            indices=view_indices,
+            faces=view_faces,
+            alphas=view_alphas,
+            vertices=vertices,
+            face_color=face_color,
         )

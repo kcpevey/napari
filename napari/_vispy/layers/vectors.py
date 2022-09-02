@@ -27,9 +27,9 @@ class VispyVectorsLayer(VispyBaseLayer):
         #     vertices=vertices, faces=faces, color=self.layer.current_edge_color
         # )
         self.node.set_data(
-            vertices=response.view_vertices,
-            faces=response.view_faces,
-            face_colors=response.view_face_color,
+            vertices=response.vertices,
+            faces=response.faces,
+            face_colors=response.face_color,
         )
 
         self.node.update()
@@ -37,5 +37,10 @@ class VispyVectorsLayer(VispyBaseLayer):
         self._on_matrix_change()
 
     def _on_data_change(self):
-        """this is replaced by set_slice, all the layer data gets moved out"""
-        raise Exception("Deprecated method; should not be called")
+        """this is replaced by set_slice
+        The only thing calling this now is line 17 above:
+        `self.layer.events.edge_color.connect(self._on_data_change)`
+        This is here as a placeholder for more delicate implementation
+        """
+
+        self.layer.refresh()  # TODO temporary sledgehammer, we may not always want to do a full refresh
