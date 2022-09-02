@@ -17,7 +17,7 @@ class VispyVectorsLayer(VispyBaseLayer):
         self.layer.events.edge_color.connect(self._on_data_change)
 
         self.reset()
-        # self._on_data_change()
+        self._on_data_change()
 
     def _set_slice(self, response: _LayerSliceResponse) -> None:
         """This method replaces the old on_data_change"""

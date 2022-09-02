@@ -732,7 +732,9 @@ class Vectors(Layer):
     def _update_thumbnail(self):
         """ Update thumbnail with current vectors and colors."""
         # TODO: return thumbnail when slicing instead of updating in-place.
-        pass
+        # self.thumbnail = self._make_thumbnail(view_data, view_indices)
+        pass 
+
 
     def _make_thumbnail(self, view_data, view_indices):
         """ THIS IS FROM THE OLD UPDATE_THUMBNAIL METHOD

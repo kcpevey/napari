@@ -498,7 +498,7 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
             )
 
         self._opacity = opacity
-        self._update_thumbnail()
+        self._update_thumbnail()  # TODO: we need some "current slice state", this is where SliceInput/Output comes in
         self.events.opacity()
 
     @property
