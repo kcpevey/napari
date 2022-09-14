@@ -38,7 +38,7 @@ jobs:
       - name: Unzip and prepare data
         run: |
           unzip asv_results.zip
-          sed -i 's/||BENCHMARK_CI_LOGS_URL||/${{ github.event.workflow_run.html_url }}/g' .asv/results/message.txt
+          sed -i "s/||BENCHMARK_CI_LOGS_URL||/${{ github.event.workflow_run.html_url }}/g" .asv/results/message.txt
           if [[ -f .asv/results/pr_number ]]; then
             echo "PR_NUMBER=$(cat .asv/results/pr_number)" >> $GITHUB_ENV
           fi
