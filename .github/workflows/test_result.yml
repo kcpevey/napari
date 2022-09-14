@@ -1,11 +1,11 @@
 # We need a dual workflow to make sure the token has the needed permissions to post comments
 # See https://stackoverflow.com/a/71683208 for more details
 
-name: Benchmarks - Report
+name: test_result
 
 on:
   workflow_run:
-    workflows: [Benchmarks]
+    workflows: [trigger]
     types:
       - completed
 
