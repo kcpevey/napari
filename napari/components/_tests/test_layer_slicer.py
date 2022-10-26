@@ -246,17 +246,24 @@ def test_slice_layers_async_task_to_layers_lock(layer_slicer):
     assert task not in layer_slicer._layers_to_task
 
 
-def test_slice_layers_async_await(layer_slicer):
+def test_await_slice(layer_slicer):
     dims = Dims()
     layer = FakeAsyncLayer()
 
-    assert layer.slice_count == 0
     with layer.lock:
         blocked = layer_slicer.slice_layers_async(layers=[layer], dims=dims)
         assert not blocked.done()
 
-    layer_slicer.await_slice(
-        timeout=5
-    )  # TODO this is a terrible test, come up with something else
+    layer_slicer.await_slice(future=blocked, timeout=5)
+    assert blocked.done()
 
-    assert blocked.result()[layer].id == 1
+
+def test_await_slice_blocked_timeout(layer_slicer):
+    dims = Dims()
+    layer = FakeAsyncLayer()
+    timeout = 0.5
+
+    with layer.lock:
+        blocked = layer_slicer.slice_layers_async(layers=[layer], dims=dims)
+        with pytest.raises(TimeoutError):
+            layer_slicer.await_slice(future=blocked, timeout=timeout)

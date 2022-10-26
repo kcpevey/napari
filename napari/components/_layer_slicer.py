@@ -36,6 +36,8 @@ class _LayerSlicer:
         ----------
         _executor : concurrent.futures.ThreadPoolExecutor
             manager for the slicing threading
+        _force_sync: bool
+            if true, forces slicing to execute synchronously
         _layers_to_task : dict
             task storage for cancellation logic
         _lock_layers_to_task : threading.RLock
@@ -44,9 +46,9 @@ class _LayerSlicer:
         """
         self.events = EmitterGroup(source=self, ready=Event)
         self._executor: Executor = ThreadPoolExecutor(max_workers=1)
+        self._force_sync = False
         self._layers_to_task: Dict[Tuple[Layer], Future] = {}
         self._lock_layers_to_task = RLock()
-        self._force_sync = False
 
     @contextmanager
     def force_sync(self):
@@ -57,9 +59,21 @@ class _LayerSlicer:
         yield None
         self._force_sync = False
 
-    def await_slice(self, future, timeout=5):
-        """Wait for slicing task to complete"""
-        # TODO: check for layers with a lock and raise error
+    def await_slice(self, future: Future, timeout: float = 5) -> None:
+        """Wait for slicing task to complete
+
+        Attributes
+        ----------
+        future: concurrent.futures.Future
+            asynchronous slicing task
+        timeout: float
+            time in seconds to wait before raising TimeoutError, defaults to 5s
+
+        Raises
+        ------
+        TimeoutError: when the timeout limit has been exceeded and the task is
+            not yet complete
+        """
         done, _ = wait([future], timeout=timeout)
         if done:
             return
