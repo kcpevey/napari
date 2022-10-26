@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from concurrent.futures import Executor, Future, ThreadPoolExecutor
+from concurrent.futures import Executor, Future, ThreadPoolExecutor, wait
+from contextlib import contextmanager
 from threading import RLock
 from typing import Dict, Iterable, Optional, Tuple
 
@@ -45,6 +46,27 @@ class _LayerSlicer:
         self._executor: Executor = ThreadPoolExecutor(max_workers=1)
         self._layers_to_task: Dict[Tuple[Layer], Future] = {}
         self._lock_layers_to_task = RLock()
+        self._force_sync = False
+
+    @contextmanager
+    def force_sync(self):
+        """Context manager to allow a forced sync. This method only holds
+        the _force_sync variable as True while the manager is open, then
+        resets it back to False after the manager is closed."""
+        self._force_sync = True
+        yield None
+        self._force_sync = False
+
+    def await_slice(self, future, timeout=5):
+        """Wait for slicing task to complete"""
+        # TODO: check for layers with a lock and raise error
+        done, _ = wait([future], timeout=timeout)
+        if done:
+            return
+        else:
+            raise TimeoutError(
+                f'Slice task did not complete within timeout ({timeout}s).'
+            )
 
     def slice_layers_async(
         self, layers: Iterable[Layer], dims: Dims
@@ -77,7 +99,7 @@ class _LayerSlicer:
         # when we want to perform sync slicing anyway.
         requests = {}
         for layer in layers:
-            if layer._is_async():
+            if layer._is_async() and not self._force_sync:
                 requests[layer] = layer._make_slice_request(dims)
             else:
                 layer._slice_dims(dims.point, dims.ndisplay, dims.order)
