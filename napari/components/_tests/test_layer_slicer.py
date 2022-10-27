@@ -267,3 +267,13 @@ def test_await_slice_blocked_timeout(layer_slicer):
         blocked = layer_slicer.slice_layers_async(layers=[layer], dims=dims)
         with pytest.raises(TimeoutError):
             layer_slicer.await_slice(future=blocked, timeout=timeout)
+
+
+def test_wait_until_idle(layer_slicer):
+    dims = Dims()
+    layer = FakeAsyncLayer()
+
+    layer_slicer.slice_layers_async(layers=[layer], dims=dims)
+    # depending on speed of execution, this may or may not pick up active futures
+    layer_slicer.wait_until_idle()
+    assert not layer_slicer._layers_to_task
