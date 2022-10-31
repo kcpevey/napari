@@ -56,28 +56,28 @@ jobs:
     steps:
       # We need the full repo to avoid this issue
       # https://github.com/actions/checkout/issues/23
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
+#       - uses: actions/checkout@v3
+#         with:
+#           fetch-depth: 0
 
-      - uses: actions/setup-python@v4
-        name: Install Python
-        with:
-          python-version: "3.9"
+#       - uses: actions/setup-python@v4
+#         name: Install Python
+#         with:
+#           python-version: "3.9"
 
-      - uses: tlambert03/setup-qt-libs@v1
+#       - uses: tlambert03/setup-qt-libs@v1
 
-      - name: Setup asv
-        run: python -m pip install asv virtualenv
+#       - name: Setup asv
+#         run: python -m pip install asv virtualenv
 
-      - uses: octokit/request-action@v2.x
-        id: latest_release
-        with:
-          route: GET /repos/{owner}/{repo}/releases/latest
-          owner: napari
-          repo: napari
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#       - uses: octokit/request-action@v2.x
+#         id: latest_release
+#         with:
+#           route: GET /repos/{owner}/{repo}/releases/latest
+#           owner: napari
+#           repo: napari
+#         env:
+#           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 #       - name: Run ${{ matrix.benchmark-name }} benchmarks
 #         id: run_benchmark
@@ -142,6 +142,7 @@ jobs:
       - name: Add more info to artifact
         if: always()
         run: |
+          mkdir -p .asv/results
           echo "hello" > .asv/results/asv_continuous.log
           echo "hello" > .asv/results/message.txt
           echo "321" > .asv/results/pr_number
