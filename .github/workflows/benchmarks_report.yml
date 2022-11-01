@@ -19,6 +19,7 @@ jobs:
         with:
           retries: 5
           script: |
+            console.log(`Getting artifacts for workflow run id: ${context.payload.workflow_run.id}`);
             console.log('here');
             let allArtifacts = await github.rest.actions.listWorkflowRunArtifacts({
                owner: context.repo.owner,
