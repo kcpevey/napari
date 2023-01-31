@@ -34,6 +34,7 @@ class ExperimentalSettings(EventedSettings):
         description="",
         type='boolean',
         requires_restart=False,
+        env='napari_async_slicing',
     )
 
     class NapariConfig:
