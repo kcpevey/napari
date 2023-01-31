@@ -28,6 +28,14 @@ class ExperimentalSettings(EventedSettings):
         requires_restart=True,
     )
 
+    async_slicing: bool = Field(
+        False,
+        title="Use asynchronous slicing",
+        description="",
+        type='boolean',
+        requires_restart=False,
+    )
+
     class NapariConfig:
         # Napari specific configuration
         preferences_exclude = ['schema_version']
