@@ -32,7 +32,6 @@ from napari.layers.intensity_mixin import IntensityVisualizationMixin
 from napari.layers.utils._slice_input import _SliceInput
 from napari.layers.utils.layer_utils import calc_data_range
 from napari.layers.utils.plane import SlicingPlane
-from napari.utils import config
 from napari.utils._dask_utils import DaskIndexer
 from napari.utils._dtype import get_dtype_limits, normalize_dtype
 from napari.utils.colormaps import AVAILABLE_COLORMAPS
@@ -46,7 +45,6 @@ from napari.utils.translations import trans
 
 if TYPE_CHECKING:
     from napari.components import Dims
-    from napari.components.experimental.chunk import ChunkRequest
 
 
 # It is important to contain at least one abstractmethod to properly exclude this class
@@ -814,6 +812,7 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         """Update the slice output state currently on the layer."""
         self._slice_input = response.dims
 
+        # TODO: remove the following 2 lines:
         # For the old experimental async code.
         self._empty = False
         slice_data = self._SliceDataClass(
@@ -825,6 +824,7 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
 
         self._transforms[0] = response.tile_to_data
 
+        # TODO remove the following line
         # For the old experimental async code, where loading might be sync
         # or async.
         self._load_slice(slice_data)
@@ -839,13 +839,6 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
 
     @property
     def _SliceDataClass(self):
-        # Use special ChunkedSlideData for async.
-        if config.async_loading:
-            from napari.layers.image.experimental._chunked_slice_data import (
-                ChunkedSliceData,
-            )
-
-            return ChunkedSliceData
         return ImageSliceData
 
     def _load_slice(self, data: ImageSliceData):
@@ -855,6 +848,8 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         ----------
         data : Slice
         """
+        # TODO ASYNC: Remove the async portion of this block - is the sync
+        # portion still needed?
         if self._slice.load(data):
             # The load was synchronous.
             self._on_data_loaded(data, sync=True)
@@ -877,27 +872,37 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         sync : bool
             If True the chunk was loaded synchronously.
         """
+        # TODO ASYNC: There are quite a few things here which aren't covered by
+        # QtViewer._on_slice_ready - where should they go, if anywhere?
+
+        # TODO ASYNC: The following block is not triggered elsewhere
         # Transpose after the load.
         data.transpose(self._get_order())
 
+        # TODO ASYNC: The following block is still needed for both sync and
+        # # async
         # Pass the loaded data to the slice.
         if not self._slice.on_loaded(data):
             # Slice rejected it, was it for the wrong indices?
             return
 
+        # TODO ASYNC: The following block is not triggered elsewhere
         # Notify the world.
         if self.multiscale:
             self.events.scale()
             self.events.translate()
 
+        # TODO ASYNC: confirmed that this is not necessary for async
         # Announcing we are in the loaded state will make our node visible
         # if it was invisible during the load.
         self.events.loaded()
 
+        # TODO ASYNC: confirmed that this is not necessary for async
         if not sync:
             # TODO_ASYNC: Avoid calling self.refresh(), because it would
             # call our _set_view_slice(). Do we need a "refresh without
             # set_view_slice()" method that we can call?
+            # TODO ASYNC: this now happens in `QtViewer._on_slice_ready`
 
             self.events.set_data(value=self._slice)  # update vispy
             self._update_thumbnail()
@@ -1014,21 +1019,6 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         """
         return [p + 0.5 for p in position]
 
-    # For async we add an on_chunk_loaded() method.
-    if config.async_loading:
-
-        def on_chunk_loaded(self, request: ChunkRequest) -> None:
-            """An asynchronous ChunkRequest was loaded.
-
-            Parameters
-            ----------
-            request : ChunkRequest
-                This request was loaded.
-            """
-            # Convert the ChunkRequest to SliceData and use it.
-            data = self._SliceDataClass.from_request(self, request)
-            self._on_data_loaded(data, sync=False)
-
 
 class Image(_ImageBase):
     @property
@@ -1096,13 +1086,6 @@ class Image(_ImageBase):
             }
         )
         return state
-
-
-if config.async_octree:
-    from napari.layers.image.experimental.octree_image import _OctreeImageBase
-
-    class Image(Image, _OctreeImageBase):
-        pass
 
 
 Image.__doc__ = _ImageBase.__doc__

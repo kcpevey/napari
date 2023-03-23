@@ -270,7 +270,7 @@ class QtViewer(QSplitter):
         )
         self.canvas.events.draw.connect(self.camera.on_draw)
 
-        # Create the experimental QtPool for octree and/or monitor.
+        # Create the experimental QtPool for monitor if necessary.
         self._qt_poll = _create_qt_poll(self, self.viewer.camera)
 
         # Create the experimental RemoteManager for the monitor.
@@ -278,18 +278,7 @@ class QtViewer(QSplitter):
             self.viewer.layers, self._qt_poll
         )
 
-        # moved from the old layerlist... still feels misplaced.
-        # can you help me move this elsewhere?
-        if config.async_loading:
-            from napari._qt.experimental.qt_chunk_receiver import (
-                QtChunkReceiver,
-            )
-
-            # The QtChunkReceiver object allows the ChunkLoader to pass newly
-            # loaded chunks to the layers that requested them.
-            self.chunk_receiver = QtChunkReceiver(self.layers)
-        else:
-            self.chunk_receiver = None
+        self.chunk_receiver = None
 
         # bind shortcuts stored in settings last.
         self._bind_shortcuts()
@@ -527,9 +516,10 @@ class QtViewer(QSplitter):
 
     @ensure_main_thread
     def _on_slice_ready(self, event):
+        """This event only gets emitted on async path"""
         responses = event.value
         for layer, response in responses.items():
-            # Update the layer slice state to temporarily support behavior
+            # TODO ASYNC: [REMOVE] Update the layer slice state to temporarily support behavior
             # that depends on it.
             layer._update_slice_response(response)
             # The rest of `Layer.refresh` after `set_view_slice`, where `set_data`
@@ -1269,11 +1259,7 @@ if TYPE_CHECKING:
 def _create_qt_poll(parent: QObject, camera: Camera) -> Optional[QtPoll]:
     """Create and return a QtPoll instance, if needed.
 
-    Create a QtPoll instance for octree or monitor.
-
-    Octree needs QtPoll so VispyTiledImageLayer can finish in-progress
-    loads even if the camera is not moving. Once loading is finish it will
-    tell QtPoll it no longer needs to be polled.
+    Create a QtPoll instance for monitor.
 
     Monitor needs QtPoll to poll for incoming messages. This might be
     temporary until we can process incoming messages with a dedicated
@@ -1291,7 +1277,7 @@ def _create_qt_poll(parent: QObject, camera: Camera) -> Optional[QtPoll]:
     Optional[QtPoll]
         The new QtPoll instance, if we need one.
     """
-    if not config.async_octree and not config.monitor:
+    if not config.monitor:
         return None
 
     from napari._qt.experimental.qt_poll import QtPoll

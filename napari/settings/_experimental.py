@@ -1,5 +1,3 @@
-from typing import Union
-
 from pydantic import Field
 
 from napari.settings._base import EventedSettings
@@ -10,22 +8,13 @@ from napari.utils.translations import trans
 # it uses Field(env=...) for one of its attributes
 class ExperimentalSettings(EventedSettings):
     async_: bool = Field(
-        True,
+        False,
         title=trans._("Render Images Asynchronously"),
         description=trans._(
-            "Asynchronous loading of image data. \nThis setting partially loads data while viewing. \nYou must restart napari for changes of this setting to apply."
+            "Asynchronous loading of image data. \nThis setting partially loads data while viewing."
         ),
         env="napari_async",
-        requires_restart=True,
-    )
-    octree: Union[bool, str] = Field(
-        False,
-        title=trans._("Legacy octree setting (deprecated)"),
-        description=trans._(
-            "Renders images asynchronously using tiles. \nYou must restart napari for changes of this setting to apply."
-        ),
-        type='boolean',  # need to specify to build checkbox in preferences.
-        requires_restart=True,
+        requires_restart=False,
     )
 
     class NapariConfig:

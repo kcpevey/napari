@@ -51,7 +51,6 @@ from IPython.core.history import HistoryManager
 
 from napari.components import LayerList
 from napari.layers import Image, Labels, Points, Shapes, Vectors
-from napari.utils.config import async_loading
 from napari.utils.misc import ROOT_DIR
 
 if TYPE_CHECKING:
@@ -62,12 +61,14 @@ def pytest_addoption(parser):
     """Add napari specific command line options.
 
     --aysnc_only
-        Run only asynchronous tests, not sync ones.
+        Run only asynchronous tests, not sync ones. This is the same as
+        `pytest napari -m async_only`. It is slower but this is how tox skips
+        these tests.
 
     Notes
     -----
     Due to the placement of this conftest.py file, you must specifically name
-    the napari folder such as "pytest napari --aysnc_only"
+    the napari folder such as "pytest napari --async_only"
     """
 
     parser.addoption(
@@ -178,56 +179,6 @@ def layers():
         Vectors(np.random.rand(10, 2, 2)),
     ]
     return LayerList(list_of_layers)
-
-
-# Currently we cannot run async and async in the invocation of pytest
-# because we get a segfault for unknown reasons. So for now:
-# "pytest" runs sync_only
-# "pytest napari --async_only" runs async only
-@pytest.fixture(scope="session", autouse=True)
-def configure_loading(request):
-    """Configure async/async loading."""
-    if request.config.getoption("--async_only"):
-        # Late import so we don't import experimental code unless using it.
-        from napari.components.experimental.chunk import synchronous_loading
-
-        with synchronous_loading(False):
-            yield
-    else:
-        yield  # Sync so do nothing.
-
-
-def _is_async_mode() -> bool:
-    """Return True if we are currently loading chunks asynchronously
-
-    Returns
-    -------
-    bool
-        True if we are currently loading chunks asynchronously.
-    """
-    if not async_loading:
-        return False  # Not enabled at all.
-    else:
-        # Late import so we don't import experimental code unless using it.
-        from napari.components.experimental.chunk import chunk_loader
-
-        return not chunk_loader.force_synchronous
-
-
-@pytest.fixture(autouse=True)
-def skip_sync_only(request):
-    """Skip async_only tests if running async."""
-    sync_only = request.node.get_closest_marker('sync_only')
-    if _is_async_mode() and sync_only:
-        pytest.skip("running with --async_only")
-
-
-@pytest.fixture(autouse=True)
-def skip_async_only(request):
-    """Skip async_only tests if running sync."""
-    async_only = request.node.get_closest_marker('async_only')
-    if not _is_async_mode() and async_only:
-        pytest.skip("not running with --async_only")
 
 
 @pytest.fixture(autouse=True)
@@ -396,6 +347,7 @@ def pytest_generate_tests(metafunc):
 
 
 def pytest_collection_modifyitems(session, config, items):
+    skip_non_async = pytest.mark.skip(reason="only running async tests")
     test_order_prefix = [
         os.path.join("napari", "utils"),
         os.path.join("napari", "layers"),
@@ -411,6 +363,10 @@ def pytest_collection_modifyitems(session, config, items):
     test_order = [[] for _ in test_order_prefix]
     test_order.append([])  # for not matching tests
     for item in items:
+        if config.getoption("--async_only") and not item.get_closest_marker(
+            'async_only'
+        ):
+            item.add_marker(skip_non_async)
         index = -1
         for i, prefix in enumerate(test_order_prefix):
             if prefix in str(item.fspath):

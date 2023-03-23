@@ -10,7 +10,6 @@ import numpy as np
 from napari.layers.image._image_loader import ImageLoader
 from napari.layers.image._image_slice_data import ImageSliceData
 from napari.layers.image._image_view import ImageView
-from napari.utils import config
 
 LOGGER = logging.getLogger("napari.loader")
 
@@ -26,14 +25,7 @@ def _create_loader_class() -> ImageLoader:
     ImageLoader
         Return ImageLoader for sync or ChunkImageLoader for async.
     """
-    if config.async_loading:
-        from napari.layers.image.experimental._chunked_image_loader import (
-            ChunkedImageLoader,
-        )
-
-        return ChunkedImageLoader()
-    else:
-        return ImageLoader()
+    return ImageLoader()
 
 
 class ImageSlice:
