@@ -185,6 +185,7 @@ class _LayerSlicer:
 
         # Then execute sync slicing tasks to run concurrent with async ones.
         for layer in sync_layers:
+            # goes through `slice_dims` to `make_slice_input`, the calls `refresh` which calls `set_view_slic` which calls `make_slic_request_internal` which calls `updatE_slice_response`
             layer._slice_dims(
                 dims.point, dims.ndisplay, dims.order, force=force
             )

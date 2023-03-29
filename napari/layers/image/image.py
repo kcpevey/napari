@@ -2,6 +2,7 @@
 """
 from __future__ import annotations
 
+import logging
 import types
 import warnings
 from contextlib import nullcontext
@@ -42,6 +43,8 @@ from napari.utils.migrations import rename_argument
 from napari.utils.misc import reorder_after_dim_reduction
 from napari.utils.naming import magic_name
 from napari.utils.translations import trans
+
+logger = logging.getLogger("Layer.Image")
 
 if TYPE_CHECKING:
     from napari.components import Dims
@@ -706,15 +709,6 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         self._custom_interpolation_kernel_2d = np.array(value, np.float32)
         self.events.custom_interpolation_kernel_2d()
 
-    @property
-    def loaded(self):
-        """Has the data for this layer been loaded yet.
-
-        With asynchronous loading the layer might exist but its data
-        for the current slice has not been loaded.
-        """
-        return self._slice.loaded
-
     def _raw_to_displayed(self, raw):
         """Determine displayed image from raw image.
 
@@ -809,13 +803,14 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         )
 
     def _update_slice_response(self, response: _ImageSliceResponse) -> None:
-        """Update the slice output state currently on the layer."""
+        """Update the slice output state currently on the layer. Currently used
+        for both sync and async slicing.
+        """
         self._slice_input = response.dims
 
-        # TODO: remove the following 2 lines:
         # For the old experimental async code.
         self._empty = False
-        slice_data = self._SliceDataClass(
+        slice_data = ImageSliceData(
             layer=self,
             indices=response.indices,
             image=response.data,
@@ -824,9 +819,9 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
 
         self._transforms[0] = response.tile_to_data
 
-        # TODO remove the following line
         # For the old experimental async code, where loading might be sync
-        # or async.
+        # or async. There are some things down this path that are still needed
+        # by sync and async.
         self._load_slice(slice_data)
 
         # Maybe reset the contrast limits based on the new slice.
@@ -837,29 +832,19 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         elif self._keep_auto_contrast:
             self.reset_contrast_limits()
 
-    @property
-    def _SliceDataClass(self):
-        return ImageSliceData
-
     def _load_slice(self, data: ImageSliceData):
-        """Load the image and maybe thumbnail source.
+        """Load the image and maybe thumbnail source. Currently used
+        for both sync and async slicing.
 
         Parameters
         ----------
         data : Slice
         """
-        # TODO ASYNC: Remove the async portion of this block - is the sync
-        # portion still needed?
-        if self._slice.load(data):
-            # The load was synchronous.
-            self._on_data_loaded(data, sync=True)
-        else:
-            # The load will be asynchronous. Signal that our self.loaded
-            # property is now false, since the load is in progress.
-            self.events.loaded()
+        self._slice.load(data)
+        self._on_data_loaded(data)
 
-    def _on_data_loaded(self, data: ImageSliceData, sync: bool) -> None:
-        """The given data a was loaded, use it now.
+    def _on_data_loaded(self, data: ImageSliceData) -> None:
+        """The given data was loaded, use it now.
 
         This routine is called synchronously from _load_async() above, or
         it is called asynchronously sometime later when the ChunkLoader
@@ -872,21 +857,15 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         sync : bool
             If True the chunk was loaded synchronously.
         """
-        # TODO ASYNC: There are quite a few things here which aren't covered by
-        # QtViewer._on_slice_ready - where should they go, if anywhere?
-
-        # TODO ASYNC: The following block is not triggered elsewhere
         # Transpose after the load.
         data.transpose(self._get_order())
 
-        # TODO ASYNC: The following block is still needed for both sync and
-        # # async
+        # The following block is still needed for both sync and async
         # Pass the loaded data to the slice.
         if not self._slice.on_loaded(data):
             # Slice rejected it, was it for the wrong indices?
             return
 
-        # TODO ASYNC: The following block is not triggered elsewhere
         # Notify the world.
         if self.multiscale:
             self.events.scale()
@@ -897,22 +876,8 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         # if it was invisible during the load.
         self.events.loaded()
 
-        # TODO ASYNC: confirmed that this is not necessary for async
-        if not sync:
-            # TODO_ASYNC: Avoid calling self.refresh(), because it would
-            # call our _set_view_slice(). Do we need a "refresh without
-            # set_view_slice()" method that we can call?
-            # TODO ASYNC: this now happens in `QtViewer._on_slice_ready`
-
-            self.events.set_data(value=self._slice)  # update vispy
-            self._update_thumbnail()
-
     def _update_thumbnail(self):
         """Update thumbnail with current image data and colormap."""
-        if not self.loaded:
-            # ASYNC_TODO: Do not compute the thumbnail until we are loaded.
-            # Is there a nicer way to prevent this from getting called?
-            return
 
         image = self._slice.thumbnail.view
 

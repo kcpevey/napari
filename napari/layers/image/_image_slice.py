@@ -17,17 +17,6 @@ if TYPE_CHECKING:
     from napari.types import ArrayLike
 
 
-def _create_loader_class() -> ImageLoader:
-    """Return correct ImageLoader for sync or async.
-
-    Returns
-    -------
-    ImageLoader
-        Return ImageLoader for sync or ChunkImageLoader for async.
-    """
-    return ImageLoader()
-
-
 class ImageSlice:
     """The slice of the image that we are currently viewing.
 
@@ -62,12 +51,7 @@ class ImageSlice:
         self.image: ImageView = ImageView(image, image_converter)
         self.thumbnail: ImageView = ImageView(image, image_converter)
         self.rgb = rgb
-        self.loader = _create_loader_class()
-
-        # With async there can be a gap between when the ImageSlice is
-        # created and the data is actually loaded. However initialize
-        # as True in case we aren't even doing async loading.
-        self.loaded = True
+        self.loader = ImageLoader()
 
     def _set_raw_images(
         self, image: ArrayLike, thumbnail_source: ArrayLike
@@ -113,7 +97,6 @@ class ImageSlice:
         bool
             Return True if load was synchronous.
         """
-        self.loaded = False  # False until self._on_loaded is calls
         return self.loader.load(data)
 
     def on_loaded(self, data: ImageSliceData) -> bool:
@@ -134,5 +117,5 @@ class ImageSlice:
 
         # Display the newly loaded data.
         self._set_raw_images(data.image, data.thumbnail_source)
-        self.loaded = True
+
         return True  # data was used.
