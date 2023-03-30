@@ -307,8 +307,6 @@ def test_get_settings_fails(monkeypatch, tmp_path):
     ):
         settings.get_settings(p)
 
-    # assert 'The path can only be set once per session' in str(e)
-
 
 def test_first_time():
     """This test just confirms that we don't load an existing file (locally)"""

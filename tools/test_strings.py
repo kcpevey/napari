@@ -42,7 +42,6 @@ from strings_list import (
 
 REPO_ROOT = Path(__file__).resolve()
 NAPARI_MODULE = (REPO_ROOT / "napari").relative_to(REPO_ROOT)
-print(NAPARI_MODULE)
 
 # Types
 StringIssuesDict = Dict[str, List[Tuple[int, str]]]
@@ -311,7 +310,6 @@ def compress_str(gen):
                 acc.append(eval(tokstr))
             else:
                 # b"", f"" ... are Strings
-                print(tokstr)
                 acc.append(eval(tokstr[1:]))
             if not acc_line:
                 acc_line = lineno
