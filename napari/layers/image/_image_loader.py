@@ -6,8 +6,6 @@ from napari.layers.image._image_slice_data import ImageSliceData
 class ImageLoader:
     """The default synchronous ImageLoader."""
 
-    # TODO: this whole class can be deprecated.
-
     def load(self, data: ImageSliceData) -> bool:
         """Load the ImageSliceData synchronously.
 
@@ -22,6 +20,7 @@ class ImageLoader:
             True if load happened synchronously.
         """
         data.load_sync()
+        return True
 
     def match(self, data: ImageSliceData) -> bool:
         """Return True if data matches what we are loading.

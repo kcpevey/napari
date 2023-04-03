@@ -14,8 +14,7 @@ from napari.components.experimental.chunk._cache import ChunkCache
 from napari.components.experimental.chunk._info import LayerInfo, LoadType
 from napari.components.experimental.chunk._pool_group import LoaderPoolGroup
 from napari.components.experimental.chunk._request import ChunkRequest
-
-# from napari.utils.config import octree_config  # REMOVED
+from napari.utils.config import octree_config
 from napari.utils.events import EmitterGroup
 
 LOGGER = logging.getLogger("napari.loader")
@@ -38,21 +37,19 @@ class ChunkLoader:
     """
 
     def __init__(self) -> None:
-        _setup_logging(octree_config)  # noqa: F821
+        _setup_logging(octree_config)
 
-        loader_config = octree_config['loader_defaults']  # noqa: F821
+        loader_config = octree_config['loader_defaults']
 
         self.force_synchronous: bool = bool(loader_config['force_synchronous'])
         self.auto_sync_ms = loader_config['auto_sync_ms']
-        self.octree_enabled = octree_config['octree']['enabled']  # noqa: F821
+        self.octree_enabled = octree_config['octree']['enabled']
 
         self.layer_map: Dict[int, LayerInfo] = {}
         self.cache: ChunkCache = ChunkCache()
 
         self.events = EmitterGroup(source=self, chunk_loaded=None)
-        self._loaders = LoaderPoolGroup(
-            octree_config, self._on_done  # noqa: F821
-        )
+        self._loaders = LoaderPoolGroup(octree_config, self._on_done)
 
     def get_info(self, layer_id: int) -> Optional[LayerInfo]:
         """Get LayerInfo for this layer or None.
@@ -395,5 +392,4 @@ Think of the ChunkLoader as a shared resource like "the filesystem" where
 multiple clients can be access it at the same time, but it is the interface
 to just one physical resource.
 """
-# chunk_loader = ChunkLoader() if octree_config else None # Removed octree
-chunk_loader = None
+chunk_loader = ChunkLoader() if octree_config else None
