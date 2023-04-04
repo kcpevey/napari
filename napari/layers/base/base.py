@@ -71,7 +71,7 @@ def no_op(layer: Layer, event: Event) -> None:
     None
 
     """
-    return None
+    return
 
 
 @mgui.register_type(choices=get_layers, return_callback=add_layer_to_viewer)
@@ -756,12 +756,12 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
     @abstractmethod
     def data(self):
         # user writes own docstring
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @data.setter
     @abstractmethod
     def data(self, data):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @property
     @abstractmethod
@@ -772,7 +772,7 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
         -------
         extent_data : array, shape (2, D)
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @property
     def _extent_world(self) -> np.ndarray:
@@ -826,7 +826,7 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
 
     @abstractmethod
     def _get_ndim(self):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def _get_base_state(self):
         """Get dictionary of attributes on base layer.
@@ -855,7 +855,7 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
 
     @abstractmethod
     def _get_state(self):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @property
     def _type_string(self):
@@ -981,7 +981,7 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
 
     @abstractmethod
     def _set_view_slice(self):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def _slice_dims(
         self, point=None, ndisplay=2, order=None, force: bool = False
@@ -1033,7 +1033,7 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
 
     @abstractmethod
     def _update_thumbnail(self):
-        raise NotImplementedError()
+        raise NotImplementedError
 
     @abstractmethod
     def _get_value(self, position):
@@ -1049,7 +1049,7 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
         value : tuple
             Value of the data.
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def get_value(
         self,
@@ -1131,7 +1131,9 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
         start_point: np.ndarray,
         end_point: np.ndarray,
         dims_displayed: List[int],
-    ) -> Union[float, int]:
+    ) -> Union[
+        float, int, None, Tuple[Union[float, int, None], Optional[int]]
+    ]:
         """Get the layer data value along a ray
 
         Parameters
@@ -1147,9 +1149,7 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
         -------
         value
             The data value along the supplied ray.
-
         """
-        return None
 
     def projected_distance_from_mouse_drag(
         self,
@@ -1371,8 +1371,8 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
         order = np.array(world_dims)
         if offset <= 0:
             return list(range(-offset)) + list(order - offset)
-        else:
-            return list(order[order >= offset] - offset)
+
+        return list(order[order >= offset] - offset)
 
     def _display_bounding_box(self, dims_displayed: np.ndarray):
         """An axis aligned (ndisplay, 2) bounding box around the data"""
@@ -1644,7 +1644,7 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
                 components['plugin'] = self.source.reader_plugin
             return components
 
-        elif self.source.sample:
+        if self.source.sample:
             components['layer_base'] = self.name
             components['source_type'] = 'sample'
             try:
@@ -1655,17 +1655,16 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
                 components['plugin'] = self.source.sample[0]
             return components
 
-        elif self.source.widget:
+        if self.source.widget:
             components['layer_base'] = self.name
             components['source_type'] = 'widget'
             components['plugin'] = self.source.widget._function.__name__
             return components
 
-        else:
-            components['layer_base'] = self.name
-            components['source_type'] = ''
-            components['plugin'] = ''
-            return components
+        components['layer_base'] = self.name
+        components['source_type'] = ''
+        components['plugin'] = ''
+        return components
 
     def get_source_str(self):
         source_info = self._get_source_info()
@@ -1860,7 +1859,7 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
             return Cls(data, **(meta or {}))
         except Exception as exc:  # noqa: BLE001
             if 'unexpected keyword argument' not in str(exc):
-                raise exc
+                raise
 
             bad_key = str(exc).split('keyword argument ')[-1]
             raise TypeError(

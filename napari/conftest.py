@@ -113,13 +113,13 @@ def layer(request):
     if request.param == 'image':
         data = np.random.rand(20, 20)
         return Image(data)
-    elif request.param == 'labels':
+    if request.param == 'labels':
         data = np.random.randint(10, size=(20, 20))
         return Labels(data)
-    elif request.param == 'points':
+    if request.param == 'points':
         data = np.random.rand(20, 2)
         return Points(data)
-    elif request.param == 'shapes':
+    if request.param == 'shapes':
         data = [
             np.random.rand(2, 2),
             np.random.rand(2, 2),
@@ -129,14 +129,14 @@ def layer(request):
         ]
         shape_type = ['ellipse', 'line', 'path', 'polygon', 'rectangle']
         return Shapes(data, shape_type=shape_type)
-    elif request.param == 'shapes-rectangles':
+    if request.param == 'shapes-rectangles':
         data = np.random.rand(7, 4, 2)
         return Shapes(data)
-    elif request.param == 'vectors':
+    if request.param == 'vectors':
         data = np.random.rand(20, 2, 2)
         return Vectors(data)
-    else:
-        return None
+
+    return None
 
 
 @pytest.fixture()
@@ -247,8 +247,8 @@ def napari_svg_name():
 
     if tuple(metadata('napari-svg')['Version'].split('.')) < ('0', '1', '6'):
         return 'svg'
-    else:
-        return 'napari-svg'
+
+    return 'napari-svg'
 
 
 @pytest.fixture(autouse=True, scope='session')
