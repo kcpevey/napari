@@ -57,28 +57,6 @@ if TYPE_CHECKING:
     from npe2._pytest_plugin import TestPluginManager
 
 
-def pytest_addoption(parser):
-    """Add napari specific command line options.
-
-    --aysnc_only
-        Run only asynchronous tests, not sync ones. This is the same as
-        `pytest napari -m async_only`. It is slower but this is how tox skips
-        these tests.
-
-    Notes
-    -----
-    Due to the placement of this conftest.py file, you must specifically name
-    the napari folder such as "pytest napari --async_only"
-    """
-
-    parser.addoption(
-        "--async_only",
-        action="store_true",
-        default=False,
-        help="run only asynchronous tests",
-    )
-
-
 @pytest.fixture
 def layer_data_and_types():
     """Fixture that provides some layers and filenames
@@ -347,7 +325,6 @@ def pytest_generate_tests(metafunc):
 
 
 def pytest_collection_modifyitems(session, config, items):
-    skip_non_async = pytest.mark.skip(reason="only running async tests")
     test_order_prefix = [
         os.path.join("napari", "utils"),
         os.path.join("napari", "layers"),
@@ -363,10 +340,6 @@ def pytest_collection_modifyitems(session, config, items):
     test_order = [[] for _ in test_order_prefix]
     test_order.append([])  # for not matching tests
     for item in items:
-        if config.getoption("--async_only") and not item.get_closest_marker(
-            'async_only'
-        ):
-            item.add_marker(skip_non_async)
         index = -1
         for i, prefix in enumerate(test_order_prefix):
             if prefix in str(item.fspath):

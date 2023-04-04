@@ -12,6 +12,6 @@ __all__ = [
     'chunk_loader',
     'link_layers',
     'layers_linked',
-    'unlink_layers',
     'synchronous_loading',
+    'unlink_layers',
 ]

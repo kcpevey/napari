@@ -527,9 +527,11 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
     @property
     def loaded(self) -> bool:
         """Return True if this layer is fully loaded in memory.
+
         This base class says that layers are permanently in the loaded state.
         Derived classes that do asynchronous loading can override this.
         """
+        # TODO: deprecate?
         return True
 
     @property
