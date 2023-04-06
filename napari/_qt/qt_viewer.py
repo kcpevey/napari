@@ -270,13 +270,15 @@ class QtViewer(QSplitter):
         )
         self.canvas.events.draw.connect(self.camera.on_draw)
 
-        # Create the experimental QtPool for monitor if necessary.
+        # Create the experimental QtPool for octree and/or monitor.
         self._qt_poll = _create_qt_poll(self, self.viewer.camera)
 
         # Create the experimental RemoteManager for the monitor.
         self._remote_manager = _create_remote_manager(
             self.viewer.layers, self._qt_poll
         )
+
+        self.chunk_receiver = None
 
         # bind shortcuts stored in settings last.
         self._bind_shortcuts()
@@ -530,7 +532,7 @@ class QtViewer(QSplitter):
         This only gets triggered on async path."""
         responses = event.value
         for layer, response in responses.items():
-            # Update the layer slice state to temporarily support behavior
+            # TODO ASYNC: [REMOVE] Update the layer slice state to temporarily support behavior
             # that depends on it.
             layer._update_slice_response(response)
             # The rest of `Layer.refresh` after `set_view_slice`, where

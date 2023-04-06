@@ -808,6 +808,7 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         """
         self._slice_input = response.dims
 
+        # TODO: remove the following 2 lines:
         # For the old experimental async code.
         self._empty = False
         slice_data = ImageSliceData(
@@ -819,6 +820,7 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
 
         self._transforms[0] = response.tile_to_data
 
+        # TODO remove the following line
         # For the old experimental async code, where loading might be sync
         # or async. There are some things down this path that are still needed
         # by sync and async.
@@ -857,6 +859,10 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         sync : bool
             If True the chunk was loaded synchronously.
         """
+        # TODO ASYNC: There are quite a few things here which aren't covered by
+        # QtViewer._on_slice_ready - where should they go, if anywhere?
+
+        # TODO ASYNC: The following block is not triggered elsewhere
         # Transpose after the load.
         data.transpose(self._get_order())
 
@@ -866,6 +872,7 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
             # Slice rejected it, was it for the wrong indices?
             return
 
+        # TODO ASYNC: The following block is not triggered elsewhere
         # Notify the world.
         if self.multiscale:
             self.events.scale()
