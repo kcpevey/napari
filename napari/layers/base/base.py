@@ -525,6 +525,22 @@ class Layer(KeymapProvider, MousemapProvider, ABC):
         return self._source
 
     @property
+    def loaded(self) -> bool:
+        """Return True if this layer is fully loaded in memory.
+
+        This base class says that layers are permanently in the loaded state.
+        Derived classes that do asynchronous loading can override this.
+        """
+        warnings.warn(
+            trans._(
+                'Layer.loaded is deprecated from napari version 0.5 and will be removed in a later version.'
+            ),
+            DeprecationWarning,
+            stacklevel=1,
+        )
+        return True
+
+    @property
     def opacity(self):
         """float: Opacity value between 0.0 and 1.0."""
         return self._opacity

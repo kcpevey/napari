@@ -293,6 +293,17 @@ class QtViewer(QSplitter):
         for overlay in self.viewer._overlays.values():
             self._add_overlay(overlay)
 
+    @property
+    def chunk_receiver(self) -> None:
+        warnings.warn(
+            trans._(
+                'QtViewer.chunk_receiver is deprecated from napari version 0.5 and will be removed in a later version.'
+            ),
+            DeprecationWarning,
+            stacklevel=1,
+        )
+        return None
+
     @staticmethod
     def _update_dask_cache_settings(
         dask_setting: Union[DaskSettings, Event] = None
