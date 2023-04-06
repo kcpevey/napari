@@ -325,7 +325,6 @@ def pytest_generate_tests(metafunc):
 
 
 def pytest_collection_modifyitems(session, config, items):
-    skip_non_async = pytest.mark.skip(reason="only running async tests")
     test_order_prefix = [
         os.path.join("napari", "utils"),
         os.path.join("napari", "layers"),
@@ -341,10 +340,6 @@ def pytest_collection_modifyitems(session, config, items):
     test_order = [[] for _ in test_order_prefix]
     test_order.append([])  # for not matching tests
     for item in items:
-        if config.getoption("--async_only") and not item.get_closest_marker(
-            'async_only'
-        ):
-            item.add_marker(skip_non_async)
         index = -1
         for i, prefix in enumerate(test_order_prefix):
             if prefix in str(item.fspath):
