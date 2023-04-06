@@ -15,7 +15,7 @@ class ExperimentalSettings(EventedSettings):
         ),
         env="napari_async",
         requires_restart=False,
-    )
+    ) 
 
     class NapariConfig:
         # Napari specific configuration
