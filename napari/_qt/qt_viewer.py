@@ -295,7 +295,6 @@ class QtViewer(QSplitter):
         for overlay in self.viewer._overlays.values():
             self._add_overlay(overlay)
 
-    @property
     def chunk_receiver(self) -> None:
         warnings.warn(
             trans._(
@@ -304,7 +303,7 @@ class QtViewer(QSplitter):
             DeprecationWarning,
             stacklevel=1,
         )
-        return None
+        return
 
     @staticmethod
     def _update_dask_cache_settings(
