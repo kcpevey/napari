@@ -22,11 +22,17 @@ Experimental Features
 
 Async Loading
 -------------
-Deprecated.
+Deprecated. This was used by the old async slicing which was tied to octree.
+There was logic in this file which the old async required. The new async
+slicing has now been implemented and does not require the extra logic. It
+can be turned on via the UI (with no restart) or via the environment
+variable NAPARI_ASYNC=1.
 
 Octree Rendering
 ----------------
-Deprecated.
+Deprecated. Octree was deprecated in the v0.5 release. A new version of async
+slicing without octree is now available via the Experimental settings UI or the
+environment variable NAPARI_ASYNC=1.
 
 Shared Memory Server
 --------------------
@@ -55,7 +61,7 @@ def __getattr__(name):
     if name == 'octree_config':
         _warn_about_deprecated_attribute(name)
         return None
-    elif name in ('async_loading', 'async_octree'):
+    elif name in ('async_loading', 'async_octree'):  # noqa: RET505
         _warn_about_deprecated_attribute(name)
         # For async_loading, we could get the value of the remaining
         # async setting. We do not because that is dynamic, so will not
