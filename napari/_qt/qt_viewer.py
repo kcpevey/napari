@@ -531,7 +531,7 @@ class QtViewer(QSplitter):
         This only gets triggered on async path."""
         responses = event.value
         for layer, response in responses.items():
-            # TODO ASYNC: [REMOVE] Update the layer slice state to temporarily support behavior
+            # Update the layer slice state to temporarily support behavior
             # that depends on it.
             layer._update_slice_response(response)
             # The rest of `Layer.refresh` after `set_view_slice`, where

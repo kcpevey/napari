@@ -759,7 +759,7 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         slice_input = self._make_slice_input(
             dims.point, dims.ndisplay, dims.order
         )
-        # TODO: for the existing sync slicing, indices is passed through
+        # For the existing sync slicing, indices is passed through
         # to avoid some performance issues related to the evaluation of the
         # data-to-world transform and its inverse. Async slicing currently
         # absorbs these performance issues here, but we can likely improve
@@ -808,8 +808,6 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
         """
         self._slice_input = response.dims
 
-        # TODO: remove the following 2 lines:
-        # For the old experimental async code.
         self._empty = False
         slice_data = ImageSliceData(
             layer=self,
@@ -820,9 +818,7 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
 
         self._transforms[0] = response.tile_to_data
 
-        # TODO remove the following line
-        # For the old experimental async code, where loading might be sync
-        # or async. There are some things down this path that are still needed
+        # There are some things down this path that are still needed
         # by sync and async.
         self._load_slice(slice_data)
 
@@ -840,7 +836,8 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
 
         Parameters
         ----------
-        data : Slice
+        data : ImageSliceData
+            Image slice
         """
         self._slice.load(data)
         self._on_data_loaded(data)
@@ -848,21 +845,13 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
     def _on_data_loaded(self, data: ImageSliceData) -> None:
         """The given data was loaded, use it now.
 
-        This routine is called synchronously from _load_async() above, or
-        it is called asynchronously sometime later when the ChunkLoader
-        finishes loading the data in a worker thread or process.
+        This routine is called for both sync and async slicing
 
         Parameters
         ----------
-        data : ChunkRequest
-            The request that was satisfied/loaded.
-        sync : bool
-            If True the chunk was loaded synchronously.
+        data : ImageSliceData
+            Image slice
         """
-        # TODO ASYNC: There are quite a few things here which aren't covered by
-        # QtViewer._on_slice_ready - where should they go, if anywhere?
-
-        # TODO ASYNC: The following block is not triggered elsewhere
         # Transpose after the load.
         data.transpose(self._get_order())
 
@@ -872,15 +861,14 @@ class _ImageBase(IntensityVisualizationMixin, Layer):
             # Slice rejected it, was it for the wrong indices?
             return
 
-        # TODO ASYNC: The following block is not triggered elsewhere
         # Notify the world.
         if self.multiscale:
             self.events.scale()
             self.events.translate()
 
-        # TODO ASYNC: confirmed that this is not necessary for async
         # Announcing we are in the loaded state will make our node visible
         # if it was invisible during the load.
+        # This is only needed for sync slicing
         self.events.loaded()
 
     def _update_thumbnail(self):
